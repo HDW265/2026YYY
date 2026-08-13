@@ -1,25 +1,79 @@
 .版本 2
 
 ' ============================================================
-' 原版数据到达 + 批量保存 + 保存间隔
+' 保存体积优化：8MB/张 → 通常压到几百 KB
 '
-' 程序集变量：
-' .程序集变量 是否接收, 逻辑型
-' .程序集变量 屏幕图片, 整数型
-' .程序集变量 收图缓冲, 字节集
-' .程序集变量 上次刷新时间, 整数型
-' .程序集变量 是否保存图片, 逻辑型
-' .程序集变量 保存目录, 文本型
-' .程序集变量 保存序号, 整数型
-' .程序集变量 保存间隔毫秒, 整数型
-' .程序集变量 上次保存时间, 整数型
+' 【原因】
+' 8,642,560 字节很像未压缩 BMP。若直接：
+'   写到文件 (“...\1.jpg”, 收图缓冲)
+' 只是把 BMP 写成了 .jpg 后缀，体积几乎不变。
 '
-' 创建完毕：
-' 是否保存图片 ＝ 真
-' 保存目录 ＝ “E:\旧硬盘资料\原创实例\局域网\”
-' 保存序号 ＝ 1
-' 保存间隔毫秒 ＝ 1000   ' 每隔 1000 毫秒(=1秒)存一张；改这里即可
+' 【办法】
+' A. 治本：发送端改成发 JPEG（质量 50~70）
+' B. 接收端：保存前用 GDI+ 转成真正 JPEG（下面代码）
+'
+' 创建完毕增加：
+' 保存JPEG质量 ＝ 60    ' 1~100，越小越省空间
 ' ============================================================
+
+.DLL命令 GdiplusStartup, 整数型, "gdiplus", "GdiplusStartup"
+    .参数 token, 整数型, , 传址
+    .参数 input, GdiplusStartupInput, , 传址
+    .参数 output, 整数型
+
+.DLL命令 GdiplusShutdown, , "gdiplus", "GdiplusShutdown"
+    .参数 token, 整数型
+
+.DLL命令 GdipLoadImageFromStream, 整数型, "gdiplus", "GdipLoadImageFromStream"
+    .参数 stream, 整数型
+    .参数 image, 整数型, , 传址
+
+.DLL命令 GdipDisposeImage, 整数型, "gdiplus", "GdipDisposeImage"
+    .参数 image, 整数型
+
+.DLL命令 GdipSaveImageToFile, 整数型, "gdiplus", "GdipSaveImageToFile"
+    .参数 image, 整数型
+    .参数 filename, 字节集
+    .参数 clsidEncoder, 字节集
+    .参数 encoderParams, 整数型
+
+.DLL命令 CreateStreamOnHGlobal, 整数型, "ole32", "CreateStreamOnHGlobal"
+    .参数 hGlobal, 整数型
+    .参数 fDeleteOnRelease, 逻辑型
+    .参数 ppstm, 整数型, , 传址
+
+.DLL命令 GlobalAlloc, 整数型, "kernel32", "GlobalAlloc"
+    .参数 uFlags, 整数型
+    .参数 dwBytes, 整数型
+
+.DLL命令 GlobalLock, 整数型, "kernel32", "GlobalLock"
+    .参数 hMem, 整数型
+
+.DLL命令 GlobalUnlock, 整数型, "kernel32", "GlobalUnlock"
+    .参数 hMem, 整数型
+
+.DLL命令 GlobalFree, 整数型, "kernel32", "GlobalFree"
+    .参数 hMem, 整数型
+
+.DLL命令 RtlMoveMemory_到指针, , "kernel32", "RtlMoveMemory"
+    .参数 目标地址, 整数型
+    .参数 来源, 字节集
+    .参数 长度, 整数型
+
+.DLL命令 MultiByteToWideChar, 整数型, "kernel32", "MultiByteToWideChar"
+    .参数 CodePage, 整数型
+    .参数 dwFlags, 整数型
+    .参数 lpMultiByteStr, 文本型
+    .参数 cbMultiByte, 整数型
+    .参数 lpWideCharStr, 字节集
+    .参数 cchWideChar, 整数型
+
+.数据类型 GdiplusStartupInput, 公开
+    .成员 GdiplusVersion, 整数型
+    .成员 DebugEventCallback, 整数型
+    .成员 SuppressBackgroundThread, 整数型
+    .成员 SuppressExternalCodecs, 整数型
+
 
 .子程序 _服务器_局域网监控系统_数据到达
 .局部变量 数据, 字节集
@@ -42,7 +96,6 @@
     收图缓冲 ＝ {  }
     返回 ()
 .如果真结束
-
 .如果真 (缓冲长度 ＜ 20000)
     返回 ()
 .如果真结束
@@ -60,12 +113,11 @@
 
 画板_显示屏幕信息.底图 ＝ 收图缓冲
 
-' ---------- 批量保存（带间隔）----------
+' ---------- 批量保存（JPEG 压缩）----------
 .如果真 (是否保存图片 ＝ 真)
     .如果真 (保存间隔毫秒 ＜ 1)
         保存间隔毫秒 ＝ 1000
     .如果真结束
-    ' 未到间隔：只显示，不保存，也不清空缓冲前的图数据（下面仍会清空）
     .如果真 (取启动时间 () － 上次保存时间 ≥ 保存间隔毫秒)
         .如果真 (保存目录 ＝ “”)
             保存目录 ＝ “E:\旧硬盘资料\原创实例\局域网\”
@@ -76,12 +128,113 @@
         .如果真 (保存序号 ＜ 1)
             保存序号 ＝ 1
         .如果真结束
+        .如果真 (保存JPEG质量 ＜ 1 或 保存JPEG质量 ＞ 100)
+            保存JPEG质量 ＝ 60
+        .如果真结束
 
         保存路径 ＝ 保存目录 ＋ 到文本 (保存序号) ＋ “.jpg”
-        写到文件 (保存路径, 收图缓冲)
-        保存序号 ＝ 保存序号 ＋ 1
-        上次保存时间 ＝ 取启动时间 ()
+        ' ★ 不要再写：写到文件 (保存路径, 收图缓冲)
+        .如果真 (监控收图_压缩保存JPEG (收图缓冲, 保存路径, 保存JPEG质量))
+            保存序号 ＝ 保存序号 ＋ 1
+            上次保存时间 ＝ 取启动时间 ()
+        .如果真结束
     .如果真结束
 .如果真结束
 
 收图缓冲 ＝ {  }
+
+
+.子程序 监控收图_压缩保存JPEG, 逻辑型
+.参数 图片数据, 字节集
+.参数 文件路径, 文本型
+.参数 质量, 整数型, 可空
+.局部变量 token, 整数型
+.局部变量 startup, GdiplusStartupInput
+.局部变量 hMem, 整数型
+.局部变量 pMem, 整数型
+.局部变量 pStream, 整数型
+.局部变量 pImage, 整数型
+.局部变量 宽路径, 字节集
+.局部变量 encClsid, 字节集
+.局部变量 数据长度, 整数型
+.局部变量 返回值, 逻辑型
+
+返回值 ＝ 假
+.如果真 (是否为空 (质量) 或 质量 ＜ 1 或 质量 ＞ 100)
+    质量 ＝ 60
+.如果真结束
+
+数据长度 ＝ 取字节集长度 (图片数据)
+.如果真 (数据长度 ＜ 100)
+    返回 (假)
+.如果真结束
+
+' 已是较小 JPEG：直接保存
+.如果真 (取字节集左边 (图片数据, 2) ＝ { 255, 216 } 且 数据长度 ＜ 2000000)
+    写到文件 (文件路径, 图片数据)
+    返回 (真)
+.如果真结束
+
+startup.GdiplusVersion ＝ 1
+startup.DebugEventCallback ＝ 0
+startup.SuppressBackgroundThread ＝ 0
+startup.SuppressExternalCodecs ＝ 0
+token ＝ 0
+.如果真 (GdiplusStartup (token, startup, 0) ≠ 0)
+    返回 (假)
+.如果真结束
+
+hMem ＝ GlobalAlloc (2, 数据长度)
+.如果真 (hMem ＝ 0)
+    GdiplusShutdown (token)
+    返回 (假)
+.如果真结束
+
+pMem ＝ GlobalLock (hMem)
+.如果真 (pMem ＝ 0)
+    GlobalFree (hMem)
+    GdiplusShutdown (token)
+    返回 (假)
+.如果真结束
+RtlMoveMemory_到指针 (pMem, 图片数据, 数据长度)
+GlobalUnlock (hMem)
+
+pStream ＝ 0
+.如果真 (CreateStreamOnHGlobal (hMem, 真, pStream) ≠ 0 或 pStream ＝ 0)
+    GlobalFree (hMem)
+    GdiplusShutdown (token)
+    返回 (假)
+.如果真结束
+
+pImage ＝ 0
+.如果真 (GdipLoadImageFromStream (pStream, pImage) ≠ 0 或 pImage ＝ 0)
+    GdiplusShutdown (token)
+    返回 (假)
+.如果真结束
+
+宽路径 ＝ 监控收图_路径到Unicode (文件路径)
+encClsid ＝ { 1, 244, 124, 85, 4, 26, 211, 17, 154, 115, 0, 0, 248, 30, 243, 46 }
+' encoderParams=0 使用 GDI+ 默认 JPEG 质量（已远小于 BMP）
+.如果真 (GdipSaveImageToFile (pImage, 宽路径, encClsid, 0) ＝ 0)
+    返回值 ＝ 真
+.如果真结束
+
+GdipDisposeImage (pImage)
+GdiplusShutdown (token)
+返回 (返回值)
+
+
+.子程序 监控收图_路径到Unicode, 字节集
+.参数 路径, 文本型
+.局部变量 宽, 字节集
+.局部变量 字符数, 整数型
+.局部变量 i, 整数型
+
+字符数 ＝ 取文本长度 (路径) ＋ 1
+' 构造 字符数*2 个 0 字节
+宽 ＝ {  }
+.计次循环首 (字符数 × 2, i)
+    宽 ＝ 宽 ＋ { 0 }
+.计次循环尾 ()
+MultiByteToWideChar (0, 0, 路径, -1, 宽, 字符数)
+返回 (宽)
