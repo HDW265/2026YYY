@@ -1,7 +1,21 @@
 @echo off
-setlocal
 cd /d "%~dp0"
-dotnet publish "src\LanMonitor.Receiver\LanMonitor.Receiver.csproj" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o "publish\win-x64"
+
+where dotnet >nul 2>nul
+if errorlevel 1 (
+  echo ERROR: dotnet SDK not found. Install .NET 8 SDK first.
+  pause
+  exit /b 1
+)
+
+dotnet publish src\LanMonitor.Receiver\LanMonitor.Receiver.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o publish\win-x64
+if errorlevel 1 (
+  echo PUBLISH FAILED
+  pause
+  exit /b 1
+)
+
 echo.
-echo Output: publish\win-x64\局域网监控接收端.exe
+echo DONE. EXE is in folder publish\win-x64
+dir /b publish\win-x64\*.exe
 pause

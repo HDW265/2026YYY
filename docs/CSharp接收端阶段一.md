@@ -13,13 +13,18 @@ WinForms 主控：收图铺满显示，底栏直接改保存间隔和质量，�
 
 本机需安装 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)。
 
+在资源管理器中进入解压后的项目根目录（能看到 `LanMonitor.sln` 和 `publish-win-x64.bat`），**先打开「命令提示符」再执行**，不要用 Git Bash：
+
+1. 地址栏输入 `cmd` 回车
+2. 执行：
+
 ```bat
-dotnet publish src\LanMonitor.Receiver\LanMonitor.Receiver.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish\win-x64
+dotnet publish src\LanMonitor.Receiver\LanMonitor.Receiver.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true -o publish\win-x64
 ```
 
-把 `publish\win-x64\局域网监控接收端.exe` 拷到另一台 Windows 即可，**不必安装 .NET**。
+或双击 `publish-win-x64.bat`（须为 Windows 换行的 bat；若仍报 `/d` 不是命令，用上面这条）。
 
-也可用 `publish-win-x64.bat`。
+生成：`publish\win-x64\局域网监控接收端.exe`，拷到另一台 Windows 即可，不必安装 .NET。
 
 ## 与易语言被控对接
 
