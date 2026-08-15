@@ -14,7 +14,6 @@ public sealed class TcpReceiveServer : IDisposable
     public int Port { get; set; } = 19730;
     public int BoundPort { get; private set; }
     public string AllowList { get; set; } = string.Empty;
-    public bool ReceiveEnabled { get; set; } = true;
 
     public string? CurrentClient { get; private set; }
 
@@ -162,11 +161,6 @@ public sealed class TcpReceiveServer : IDisposable
                     if (read <= 0)
                     {
                         break;
-                    }
-
-                    if (!ReceiveEnabled)
-                    {
-                        continue;
                     }
 
                     var frames = assembler.Push(buffer.AsSpan(0, read));

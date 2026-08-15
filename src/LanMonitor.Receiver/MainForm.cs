@@ -21,13 +21,16 @@ public sealed class MainForm : Form
     private readonly Label _client = new();
     private readonly Label _fpsLabel = new();
     private readonly Label _frameSize = new();
-    private readonly CheckBox _chkReceive = new();
+    private readonly CheckBox _chkPreview = new();
     private readonly Button _btnDisconnect = new();
     private readonly RadioButton _radioZoom = new();
     private readonly RadioButton _radioStretch = new();
-    private readonly TextBox _allowIp = new();
+    private readonly Label _allowSummary = new();
+    private readonly Button _btnAllowManage = new();
+    private readonly AllowIpPolicy _allowPolicy = new();
     private readonly PictureBox _preview = new();
     private readonly Label _waiting = new();
+    private readonly Label _previewOffHint = new();
     private readonly CheckBox _chkSave = new();
     private readonly TextBox _directory = new();
     private readonly NumericUpDown _interval = new();
@@ -60,10 +63,10 @@ public sealed class MainForm : Form
             Padding = new Padding(0),
             Margin = new Padding(0)
         };
-        // 加高顶栏/保存栏，避免高 DPI 下文字上下被裁
+        // 加高顶栏，避免按钮/摘要被裁
         _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
         _root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
         _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
         Controls.Add(_root);
 
@@ -75,13 +78,19 @@ public sealed class MainForm : Form
         _server.Log += msg => BeginInvokeSafe(() => AppendLog(msg));
         _server.ClientChanged += ep => BeginInvokeSafe(() =>
         {
+            if (!string.IsNullOrEmpty(ep))
+            {
+                _allowPolicy.RememberEndpoint(ep);
+            }
+
             _client.Text = string.IsNullOrEmpty(ep) ? "客户 无连接" : "客户 " + ep;
         });
         _server.FrameReceived += OnFrameReceived;
 
         FormClosing += (_, _) => _server.Dispose();
         KeyDown += OnKeyDown;
-        AppendLog("就绪。点「开始监听」。默认端口 19730（13689 在本机常被系统保留）。");
+        RefreshAllowSummary();
+        AppendLog("就绪。点「开始监听」。预览与保存互不影响。默认端口 19730。");
     }
 
     private Control BuildTopBar()
@@ -98,8 +107,7 @@ public sealed class MainForm : Form
         bar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         bar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
-        // 行1：状态 | 端口 | 数值 | 开始 | 断开 | 接收开
-        // 标签列用 AutoSize，避免「端口」「未监听」被裁成省略号
+        // 行1：状态 | 端口 | 开始监听 | 断开客户 | 预览开
         var row1 = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -108,14 +116,14 @@ public sealed class MainForm : Form
             Margin = new Padding(0),
             Padding = new Padding(0)
         };
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));       // status
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));       // 端口
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));  // port box（五位+箭头）
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
         row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));  // listen
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 128));
         row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));  // disconnect
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));   // receive
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 128));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         _listenDot.Text = "● 未监听";
         _listenDot.ForeColor = Color.Gray;
@@ -138,27 +146,29 @@ public sealed class MainForm : Form
         row1.Controls.Add(_port, 2, 0);
 
         StyleButton(_btnListen, "开始监听");
+        _btnListen.MinimumSize = new Size(120, 32);
         _btnListen.Click += (_, _) => ToggleListen();
         row1.Controls.Add(_btnListen, 4, 0);
 
         StyleButton(_btnDisconnect, "断开客户");
+        _btnDisconnect.MinimumSize = new Size(120, 32);
         _btnDisconnect.Click += (_, _) => _server.DisconnectCurrent();
         row1.Controls.Add(_btnDisconnect, 6, 0);
 
-        _chkReceive.Text = "接收开";
-        _chkReceive.Checked = true;
-        _chkReceive.AutoSize = true;
-        _chkReceive.Anchor = AnchorStyles.Left;
-        _chkReceive.Margin = new Padding(20, 12, 0, 0);
-        _chkReceive.ForeColor = TextColor;
-        _chkReceive.CheckedChanged += (_, _) => _server.ReceiveEnabled = _chkReceive.Checked;
-        row1.Controls.Add(_chkReceive, 7, 0);
+        _chkPreview.Text = "预览开";
+        _chkPreview.Checked = true;
+        _chkPreview.AutoSize = true;
+        _chkPreview.Anchor = AnchorStyles.Left;
+        _chkPreview.Margin = new Padding(20, 12, 0, 0);
+        _chkPreview.ForeColor = TextColor;
+        _chkPreview.CheckedChanged += (_, _) => UpdatePreviewHint();
+        row1.Controls.Add(_chkPreview, 7, 0);
 
-        // 行2：客户 | fps | 最近帧 | 等比/拉伸 | 允许IP
+        // 行2：客户 | fps | 最近帧 | 等比/拉伸 | 允许摘要 | 管理
         var row2 = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 9,
+            ColumnCount = 10,
             RowCount = 1,
             Margin = new Padding(0),
             Padding = new Padding(0)
@@ -171,7 +181,8 @@ public sealed class MainForm : Form
         row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 20));
         row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
 
         _client.Text = "客户 无连接";
         _client.AutoSize = true;
@@ -208,15 +219,18 @@ public sealed class MainForm : Form
         _radioStretch.ForeColor = TextColor;
         row2.Controls.Add(_radioStretch, 5, 0);
 
-        row2.Controls.Add(MakeCaption("允许IP"), 7, 0);
+        row2.Controls.Add(MakeCaption("允许"), 7, 0);
 
-        StyleTextBox(_allowIp);
-        _allowIp.PlaceholderText = "空=全部";
-        _allowIp.Dock = DockStyle.Fill;
-        _allowIp.Margin = new Padding(8, 8, 0, 8);
-        _allowIp.MinimumSize = new Size(160, 28);
-        _allowIp.TextChanged += (_, _) => _server.AllowList = _allowIp.Text;
-        row2.Controls.Add(_allowIp, 8, 0);
+        _allowSummary.Text = "全部";
+        _allowSummary.AutoSize = true;
+        _allowSummary.Margin = new Padding(4, 10, 12, 0);
+        _allowSummary.AutoEllipsis = false;
+        row2.Controls.Add(_allowSummary, 8, 0);
+
+        StyleButton(_btnAllowManage, "管理…");
+        _btnAllowManage.MinimumSize = new Size(88, 32);
+        _btnAllowManage.Click += (_, _) => OpenAllowDialog();
+        row2.Controls.Add(_btnAllowManage, 9, 0);
 
         bar.Controls.Add(row1, 0, 0);
         bar.Controls.Add(row2, 0, 1);
@@ -234,11 +248,22 @@ public sealed class MainForm : Form
         _waiting.ForeColor = Color.FromArgb(160, 160, 160);
         _waiting.AutoSize = true;
         _waiting.Font = new Font("Microsoft YaHei UI", 16F);
+        _previewOffHint.Text = "预览已关闭";
+        _previewOffHint.ForeColor = Color.FromArgb(220, 200, 120);
+        _previewOffHint.AutoSize = true;
+        _previewOffHint.Font = new Font("Microsoft YaHei UI", 14F);
+        _previewOffHint.Visible = false;
+        host.Controls.Add(_previewOffHint);
         host.Controls.Add(_waiting);
         host.Controls.Add(_preview);
         _preview.SendToBack();
-        host.Resize += (_, _) => CenterWaiting(host);
+        host.Resize += (_, _) =>
+        {
+            CenterWaiting(host);
+            CenterOverlay(host, _previewOffHint);
+        };
         CenterWaiting(host);
+        CenterOverlay(host, _previewOffHint);
         return host;
     }
 
@@ -274,6 +299,7 @@ public sealed class MainForm : Form
         _chkSave.AutoSize = true;
         _chkSave.Margin = new Padding(0, 10, 16, 0);
         _chkSave.ForeColor = TextColor;
+        _chkSave.CheckedChanged += (_, _) => UpdatePreviewHint();
         row1.Controls.Add(_chkSave, 0, 0);
 
         row1.Controls.Add(MakeCaption("目录"), 1, 0);
@@ -341,6 +367,21 @@ public sealed class MainForm : Form
         bar.Controls.Add(row1, 0, 0);
         bar.Controls.Add(row2, 0, 1);
         _saveScheduler.IntervalSeconds = (double)_interval.Value;
+
+        var tip = new Label
+        {
+            Text = "提示：预览与保存互不影响；关预览时仍可按间隔存图。",
+            AutoSize = true,
+            ForeColor = Color.FromArgb(150, 150, 160),
+            Margin = new Padding(0, 0, 0, 0)
+        };
+        // 把 tip 叠在保存栏底部不太方便；改为挂在 row2 最近写入旁已够。追加到 bar 第三行更清晰。
+        bar.RowCount = 3;
+        bar.RowStyles.Clear();
+        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
+        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
+        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 16));
+        bar.Controls.Add(tip, 0, 2);
         return bar;
     }
 
@@ -411,6 +452,48 @@ public sealed class MainForm : Form
             Math.Max(0, (host.ClientSize.Height - _waiting.Height) / 2));
     }
 
+    private static void CenterOverlay(Control host, Label label)
+    {
+        label.Location = new Point(
+            Math.Max(0, (host.ClientSize.Width - label.Width) / 2),
+            Math.Max(0, (host.ClientSize.Height - label.Height) / 2));
+        label.BringToFront();
+    }
+
+    private void RefreshAllowSummary()
+    {
+        _allowSummary.Text = _allowPolicy.SummaryText();
+        _server.AllowList = _allowPolicy.ToAllowListString();
+    }
+
+    private void OpenAllowDialog()
+    {
+        using var dlg = new AllowIpDialog(_allowPolicy);
+        if (dlg.ShowDialog(this) == DialogResult.OK)
+        {
+            RefreshAllowSummary();
+            AppendLog("允许策略已更新：" + _allowPolicy.SummaryText());
+        }
+    }
+
+    private void UpdatePreviewHint()
+    {
+        if (_chkPreview.Checked)
+        {
+            _previewOffHint.Visible = false;
+            return;
+        }
+
+        _previewOffHint.Text = _chkSave.Checked
+            ? "预览已关闭 · 保存仍可进行"
+            : "预览已关闭";
+        _previewOffHint.Visible = true;
+        if (_preview.Parent is Control host)
+        {
+            CenterOverlay(host, _previewOffHint);
+        }
+    }
+
     private void ToggleListen()
     {
         if (_server.IsListening)
@@ -424,8 +507,7 @@ public sealed class MainForm : Form
         }
 
         _server.Port = (int)_port.Value;
-        _server.AllowList = _allowIp.Text;
-        _server.ReceiveEnabled = _chkReceive.Checked;
+        _server.AllowList = _allowPolicy.ToAllowListString();
         try
         {
             _server.Start();
@@ -470,23 +552,29 @@ public sealed class MainForm : Form
                 return;
             }
 
-            _waiting.Visible = false;
-            _fps.Tick();
-            _fpsLabel.Text = _fps.Fps.ToString("0") + " fps";
             _frameSize.Text = "最近帧 " + FormatBytes(frame.Length);
 
-            try
+            if (_chkPreview.Checked)
             {
-                using var ms = new MemoryStream(jpeg, writable: false);
-                using var img = Image.FromStream(ms);
-                var old = _preview.Image;
-                _preview.Image = (Image)img.Clone();
-                old?.Dispose();
+                _waiting.Visible = false;
+                _fps.Tick();
+                _fpsLabel.Text = _fps.Fps.ToString("0") + " fps";
+                try
+                {
+                    using var ms = new MemoryStream(jpeg, writable: false);
+                    using var img = Image.FromStream(ms);
+                    var old = _preview.Image;
+                    _preview.Image = (Image)img.Clone();
+                    old?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    LogFail("预览失败: " + ex.Message);
+                }
             }
-            catch (Exception ex)
+            else
             {
-                LogFail("预览失败: " + ex.Message);
-                return;
+                UpdatePreviewHint();
             }
 
             if (!_chkSave.Checked)

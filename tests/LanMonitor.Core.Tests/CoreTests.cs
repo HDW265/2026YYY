@@ -151,6 +151,37 @@ public class IpFilterTests
     }
 }
 
+public class AllowIpPolicyTests
+{
+    [Fact]
+    public void Allow_all_by_default()
+    {
+        var policy = new AllowIpPolicy();
+        Assert.True(policy.AllowAll);
+        Assert.Equal(string.Empty, policy.ToAllowListString());
+        Assert.Equal("全部", policy.SummaryText());
+        Assert.True(policy.IsEndpointAllowed("192.168.1.2:9"));
+    }
+
+    [Fact]
+    public void Whitelist_mode_filters()
+    {
+        var policy = new AllowIpPolicy { AllowAll = false };
+        policy.SetAllowed(new[] { "192.168.3.250" });
+        Assert.Equal("白名单(1)", policy.SummaryText());
+        Assert.True(policy.IsEndpointAllowed("192.168.3.250:123"));
+        Assert.False(policy.IsEndpointAllowed("192.168.3.10:123"));
+    }
+
+    [Fact]
+    public void Remembers_known_ips_from_endpoint()
+    {
+        var policy = new AllowIpPolicy();
+        policy.RememberEndpoint("10.0.0.8:5555");
+        Assert.Contains("10.0.0.8", policy.KnownIps);
+    }
+}
+
 public class JpegFileSaverTests
 {
     [Fact]
@@ -223,7 +254,7 @@ public class TcpReceiveServerTests
     {
         var jpeg = MakeJpeg();
         var received = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var server = new TcpReceiveServer { Port = 0, ReceiveEnabled = true };
+        using var server = new TcpReceiveServer { Port = 0 };
         server.FrameReceived += frame => received.TrySetResult(frame);
         server.Start();
         Assert.True(server.BoundPort > 0);
@@ -256,7 +287,7 @@ public class TcpReceiveServerTests
         var jpeg = MakeJpeg();
         Assert.True(jpeg.Length >= 54);
         var received = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var server = new TcpReceiveServer { Port = 0, ReceiveEnabled = true };
+        using var server = new TcpReceiveServer { Port = 0 };
         server.FrameReceived += frame => received.TrySetResult(frame);
         server.Start();
 
