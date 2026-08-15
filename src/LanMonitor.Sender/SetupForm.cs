@@ -16,6 +16,7 @@ internal sealed class SetupForm : Form
     public SetupForm()
     {
         Text = "SF_link 首次设置";
+        Icon = AppIcon.Resolve();
         AutoScaleMode = AutoScaleMode.Dpi;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -65,7 +66,7 @@ internal sealed class SetupForm : Form
 
         var tip = new Label
         {
-            Text = "进程名 SF_link · 配置在 %AppData%\\SF_link",
+            Text = "进程名 SF_link · 配置在 %ProgramData%\\SF_link（本机各用户共用）",
             Dock = DockStyle.Fill,
             ForeColor = Color.FromArgb(140, 140, 150)
         };
