@@ -33,7 +33,9 @@ internal sealed class MainForm : Form
     private readonly TextBox _newPassword = new();
     private readonly TextBox _newPassword2 = new();
     private readonly Label _hotkeyLabel = new();
+    private readonly CheckBox _chkAutoStart = new();
     private bool _allowClose;
+    private bool _syncingAutoStart;
 
     public MainForm(SenderAppContext app, StreamSession session)
     {
@@ -76,6 +78,8 @@ internal sealed class MainForm : Form
         _session.FrameSent += (bytes, _) => BeginInvokeSafe(() => OnFrameSent(bytes));
 
         LoadFromSettings(_app.Settings);
+        SyncAutoStartCheckbox();
+        Shown += (_, _) => SyncAutoStartCheckbox();
         FormClosing += OnFormClosing;
         AppendLog("关闭窗口=隐藏（无托盘）。热键 " +
                   NativeHotkey.Describe(_app.Settings.HotkeyModifiers, _app.Settings.HotkeyVirtualKey) +
@@ -343,6 +347,13 @@ internal sealed class MainForm : Form
         _hotkeyLabel.ForeColor = TextColor;
         row2.Controls.Add(_hotkeyLabel);
 
+        _chkAutoStart.Text = "开机自启";
+        _chkAutoStart.AutoSize = true;
+        _chkAutoStart.Margin = new Padding(0, 10, 16, 0);
+        _chkAutoStart.ForeColor = TextColor;
+        _chkAutoStart.CheckedChanged += (_, _) => OnAutoStartChanged();
+        row2.Controls.Add(_chkAutoStart);
+
         var hide = new Button
         {
             Text = "隐藏窗口",
@@ -425,6 +436,47 @@ internal sealed class MainForm : Form
         _log.ForeColor = Color.FromArgb(200, 200, 200);
         host.Controls.Add(_log);
         return host;
+    }
+
+    private void SyncAutoStartCheckbox()
+    {
+        _syncingAutoStart = true;
+        try
+        {
+            _chkAutoStart.Checked = AutoStartService.IsEnabledForThisExe();
+        }
+        finally
+        {
+            _syncingAutoStart = false;
+        }
+    }
+
+    private void OnAutoStartChanged()
+    {
+        if (_syncingAutoStart)
+        {
+            return;
+        }
+
+        var want = _chkAutoStart.Checked;
+        if (!AutoStartService.TryApplyWithElevation(want, out var error))
+        {
+            MessageBox.Show(this,
+                string.IsNullOrEmpty(error)
+                    ? "修改开机自启失败，需要管理员权限。"
+                    : error,
+                Text,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            SyncAutoStartCheckbox();
+            AppendLog("开机自启未更改：" + (string.IsNullOrEmpty(error) ? "需要管理员权限" : error));
+            return;
+        }
+
+        AppendLog(want
+            ? "已开启开机自启（HKLM\\...\\Run\\SF_link）。"
+            : "已关闭开机自启。");
+        SyncAutoStartCheckbox();
     }
 
     private void LoadFromSettings(SenderSettings s)

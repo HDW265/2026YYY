@@ -5,8 +5,15 @@ static class Program
     private const string MutexName = "Local\\SF_link.SingleInstance.ff9a";
 
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
+        if (args.Length >= 2 &&
+            string.Equals(args[0], "--autostart", StringComparison.OrdinalIgnoreCase))
+        {
+            Environment.ExitCode = AutoStartService.RunElevatedCli(args);
+            return;
+        }
+
         using var mutex = new Mutex(true, MutexName, out var created);
         if (!created)
         {
