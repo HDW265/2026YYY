@@ -8,7 +8,7 @@ internal sealed class PasswordDialog : Form
     public PasswordDialog(SenderSettings settings)
     {
         _settings = settings;
-        Text = "验证密码";
+        Text = "SF_link 验证";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;

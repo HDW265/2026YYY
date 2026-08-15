@@ -9,13 +9,15 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AssemblyName>局域网监控发送端</AssemblyName>
+    <AssemblyName>SF_link</AssemblyName>
     <RootNamespace>LanMonitor.Sender</RootNamespace>
-    <Product>局域网监控发送端</Product>
-    <Description>阶段二：截屏 JPEG + 长度前缀 TCP 推流</Description>
+    <Product>SF_link</Product>
+    <AssemblyTitle>SF_link</AssemblyTitle>
+    <Description>SF_link</Description>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <ProjectReference Include="..\LanMonitor.Core\LanMonitor.Core.csproj" />
   </ItemGroup>
 

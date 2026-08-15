@@ -40,7 +40,7 @@ internal sealed class MainForm : Form
         _app = app;
         _session = session;
 
-        Text = "局域网监控 · 发送端设置";
+        Text = "SF_link 设置";
         AutoScaleMode = AutoScaleMode.Dpi;
         MinimumSize = new Size(920, 720);
         Size = new Size(1000, 780);
@@ -79,7 +79,7 @@ internal sealed class MainForm : Form
         FormClosing += OnFormClosing;
         AppendLog("关闭窗口=隐藏（无托盘）。热键 " +
                   NativeHotkey.Describe(_app.Settings.HotkeyModifiers, _app.Settings.HotkeyVirtualKey) +
-                  " + 密码可再打开。点「退出程序」才结束。");
+                  " + 密码可再打开。点「退出程序」才结束。配置：%AppData%\\SF_link");
     }
 
     public void RequestExit()

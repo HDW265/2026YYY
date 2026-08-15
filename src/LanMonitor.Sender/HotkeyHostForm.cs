@@ -13,7 +13,7 @@ internal sealed class HotkeyHostForm : Form
         Size = new Size(0, 0);
         StartPosition = FormStartPosition.Manual;
         Location = new Point(-10000, -10000);
-        Text = "局域网监控发送端热键宿主";
+        Text = "SF_link 热键宿主";
     }
 
     public bool TryRegister(int modifiers, int virtualKey, out string error)

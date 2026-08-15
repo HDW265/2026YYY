@@ -14,13 +14,14 @@ internal sealed class SenderAppContext : ApplicationContext
         Settings = settings;
         _hotkeyHost = new HotkeyHostForm();
         MainForm = _hotkeyHost;
+        ScreenCapture.UiMarshal = _hotkeyHost;
 
         // 强制创建句柄以便注册热键
         _ = _hotkeyHost.Handle;
         if (!_hotkeyHost.TryRegister(settings.HotkeyModifiers, settings.HotkeyVirtualKey, out var hotkeyError))
         {
             MessageBox.Show(hotkeyError + "\n仍可后台运行；请在设置中改热键或关闭占用程序后重启。",
-                "局域网监控发送端", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                "SF_link", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         _hotkeyHost.HotkeyPressed += OnHotkeyPressed;

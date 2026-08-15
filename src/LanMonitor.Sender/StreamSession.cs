@@ -26,6 +26,7 @@ internal sealed class StreamSession : IDisposable
     private volatile int _maxEdge = 1280;
     private int _userStop;
     private int _failStreak;
+    private long _lastCaptureFailLogTick;
 
     public string Host { get; set; } = "127.0.0.1";
     public int Port { get; set; } = 19730;
@@ -272,7 +273,13 @@ internal sealed class StreamSession : IDisposable
             }
             catch (Exception ex)
             {
-                RaiseLog("截屏失败: " + ex.Message);
+                // 避免锁屏等场景刷屏
+                if (Environment.TickCount64 - _lastCaptureFailLogTick > 5000)
+                {
+                    _lastCaptureFailLogTick = Environment.TickCount64;
+                    RaiseLog("截屏失败: " + ex.Message);
+                }
+
                 await Task.Delay(delayMs, token).ConfigureAwait(false);
                 continue;
             }
