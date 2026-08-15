@@ -2,7 +2,7 @@ using LanMonitor.Core;
 
 namespace LanMonitor.Receiver;
 
-public sealed class MainForm : Form
+internal sealed class MainForm : Form
 {
     private static readonly Color BarBack = Color.FromArgb(45, 45, 50);
     private static readonly Color FormBack = Color.FromArgb(32, 32, 36);
@@ -37,15 +37,22 @@ public sealed class MainForm : Form
     private readonly NumericUpDown _quality = new();
     private readonly Label _lastSave = new();
     private readonly TextBox _log = new();
+    private readonly Button _btnHide = new();
+    private readonly ReceiverSettings _settings;
     private TableLayoutPanel? _root;
+    private NotifyIcon? _tray;
+    private ContextMenuStrip? _trayMenu;
 
     private int _saveSequence = 1;
     private bool _fullPreview;
+    private bool _allowExit;
+    private bool _authPromptOpen;
     private DateTime _lastFailLogUtc = DateTime.MinValue;
 
-    public MainForm()
+    public MainForm(ReceiverSettings settings)
     {
-        Text = "局域网监控 · 接收端";
+        _settings = settings;
+        Text = "SF_view";
         AutoScaleMode = AutoScaleMode.Dpi;
         MinimumSize = new Size(1280, 800);
         Size = new Size(1360, 860);
@@ -63,17 +70,18 @@ public sealed class MainForm : Form
             Padding = new Padding(0),
             Margin = new Padding(0)
         };
-        // 加高顶栏，避免按钮/摘要被裁
         _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
         _root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
-        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
         Controls.Add(_root);
 
         _root.Controls.Add(BuildTopBar(), 0, 0);
         _root.Controls.Add(BuildPreview(), 0, 1);
         _root.Controls.Add(BuildSaveBar(), 0, 2);
         _root.Controls.Add(BuildLog(), 0, 3);
+
+        InitTray();
 
         _server.Log += msg => BeginInvokeSafe(() => AppendLog(msg));
         _server.ClientChanged += ep => BeginInvokeSafe(() =>
@@ -87,10 +95,10 @@ public sealed class MainForm : Form
         });
         _server.FrameReceived += OnFrameReceived;
 
-        FormClosing += (_, _) => _server.Dispose();
+        FormClosing += OnFormClosing;
         KeyDown += OnKeyDown;
         RefreshAllowSummary();
-        AppendLog("就绪。点「开始监听」。预览与保存互不影响。默认端口 19730。");
+        AppendLog("就绪。点「开始监听」。预览与保存互不影响。关窗隐藏到托盘（再开需密码）。");
     }
 
     private Control BuildTopBar()
@@ -107,11 +115,11 @@ public sealed class MainForm : Form
         bar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         bar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
-        // 行1：状态 | 端口 | 开始监听 | 断开客户 | 预览开
+        // 行1：状态 | 端口 | 开始监听 | 断开客户 | 隐藏 | 预览开
         var row1 = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 8,
+            ColumnCount = 10,
             RowCount = 1,
             Margin = new Padding(0),
             Padding = new Padding(0)
@@ -123,6 +131,8 @@ public sealed class MainForm : Form
         row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 128));
         row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
         row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 128));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
         row1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         _listenDot.Text = "● 未监听";
@@ -155,6 +165,11 @@ public sealed class MainForm : Form
         _btnDisconnect.Click += (_, _) => _server.DisconnectCurrent();
         row1.Controls.Add(_btnDisconnect, 6, 0);
 
+        StyleButton(_btnHide, "隐藏");
+        _btnHide.MinimumSize = new Size(88, 32);
+        _btnHide.Click += (_, _) => HideToTray();
+        row1.Controls.Add(_btnHide, 8, 0);
+
         _chkPreview.Text = "预览开";
         _chkPreview.Checked = true;
         _chkPreview.AutoSize = true;
@@ -162,7 +177,7 @@ public sealed class MainForm : Form
         _chkPreview.Margin = new Padding(20, 12, 0, 0);
         _chkPreview.ForeColor = TextColor;
         _chkPreview.CheckedChanged += (_, _) => UpdatePreviewHint();
-        row1.Controls.Add(_chkPreview, 7, 0);
+        row1.Controls.Add(_chkPreview, 9, 0);
 
         // 行2：客户 | fps | 最近帧 | 等比/拉伸 | 允许摘要 | 管理
         var row2 = new TableLayoutPanel
@@ -305,7 +320,7 @@ public sealed class MainForm : Form
         row1.Controls.Add(MakeCaption("目录"), 1, 0);
 
         StyleTextBox(_directory);
-        _directory.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "局域网监控");
+        _directory.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "SF_view");
         _directory.Dock = DockStyle.Fill;
         _directory.Margin = new Padding(8, 8, 8, 8);
         _directory.MinimumSize = new Size(200, 28);
@@ -367,21 +382,6 @@ public sealed class MainForm : Form
         bar.Controls.Add(row1, 0, 0);
         bar.Controls.Add(row2, 0, 1);
         _saveScheduler.IntervalSeconds = (double)_interval.Value;
-
-        var tip = new Label
-        {
-            Text = "提示：预览与保存互不影响；关预览时仍可按间隔存图。",
-            AutoSize = true,
-            ForeColor = Color.FromArgb(150, 150, 160),
-            Margin = new Padding(0, 0, 0, 0)
-        };
-        // 把 tip 叠在保存栏底部不太方便；改为挂在 row2 最近写入旁已够。追加到 bar 第三行更清晰。
-        bar.RowCount = 3;
-        bar.RowStyles.Clear();
-        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
-        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
-        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 16));
-        bar.Controls.Add(tip, 0, 2);
         return bar;
     }
 
@@ -458,6 +458,107 @@ public sealed class MainForm : Form
             Math.Max(0, (host.ClientSize.Width - label.Width) / 2),
             Math.Max(0, (host.ClientSize.Height - label.Height) / 2));
         label.BringToFront();
+    }
+
+    private void InitTray()
+    {
+        _trayMenu = new ContextMenuStrip();
+        _trayMenu.Items.Add("打开", null, (_, _) => TryShowFromTray());
+        _trayMenu.Items.Add("退出", null, (_, _) => TryExitWithAuth());
+
+        _tray = new NotifyIcon
+        {
+            Text = "SF_view",
+            Icon = SystemIcons.Application,
+            Visible = true,
+            ContextMenuStrip = _trayMenu
+        };
+        _tray.DoubleClick += (_, _) => TryShowFromTray();
+    }
+
+    private void HideToTray()
+    {
+        ShowInTaskbar = false;
+        Hide();
+        if (_tray is not null)
+        {
+            _tray.Visible = true;
+        }
+
+        AppendLog("已隐藏到托盘。双击托盘图标并输入密码可再打开。");
+    }
+
+    private void TryShowFromTray()
+    {
+        if (_authPromptOpen)
+        {
+            return;
+        }
+
+        if (!PromptAuth("SF_view 验证", "输入管理密码以打开窗口"))
+        {
+            return;
+        }
+
+        ShowInTaskbar = true;
+        Show();
+        if (WindowState == FormWindowState.Minimized)
+        {
+            WindowState = FormWindowState.Normal;
+        }
+
+        Activate();
+    }
+
+    private void TryExitWithAuth()
+    {
+        if (_authPromptOpen)
+        {
+            return;
+        }
+
+        if (!PromptAuth("SF_view 退出", "输入管理密码以退出程序"))
+        {
+            return;
+        }
+
+        _allowExit = true;
+        Close();
+    }
+
+    private bool PromptAuth(string title, string prompt)
+    {
+        try
+        {
+            _authPromptOpen = true;
+            using var dlg = new AuthDialog(title, prompt, _settings.VerifyPassword);
+            return dlg.ShowDialog(Visible ? this : null) == DialogResult.OK;
+        }
+        finally
+        {
+            _authPromptOpen = false;
+        }
+    }
+
+    private void OnFormClosing(object? sender, FormClosingEventArgs e)
+    {
+        if (!_allowExit && e.CloseReason == CloseReason.UserClosing)
+        {
+            e.Cancel = true;
+            HideToTray();
+            return;
+        }
+
+        if (_tray is not null)
+        {
+            _tray.Visible = false;
+            _tray.Dispose();
+            _tray = null;
+        }
+
+        _trayMenu?.Dispose();
+        _trayMenu = null;
+        _server.Dispose();
     }
 
     private void RefreshAllowSummary()

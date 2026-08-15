@@ -8,41 +8,54 @@ internal sealed class AllowIpDialog : Form
     private readonly RadioButton _radioAll = new();
     private readonly RadioButton _radioList = new();
     private readonly CheckedListBox _list = new();
-    private readonly TextBox _addBox = new();
 
     public AllowIpDialog(AllowIpPolicy policy)
     {
         _policy = policy;
         Text = "允许的客户";
+        AutoScaleMode = AutoScaleMode.Dpi;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(420, 420);
         Font = new Font("Microsoft YaHei UI", 9.75F);
         BackColor = Color.FromArgb(32, 32, 36);
         ForeColor = Color.Gainsboro;
+        ClientSize = new Size(420, 440);
+        MinimumSize = new Size(420, 440);
+
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 4,
+            Padding = new Padding(16, 14, 16, 14)
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
 
         _radioAll.Text = "全部放行";
         _radioAll.AutoSize = true;
-        _radioAll.Location = new Point(20, 16);
         _radioAll.ForeColor = ForeColor;
         _radioAll.Checked = policy.AllowAll;
+        _radioAll.Margin = new Padding(0, 0, 0, 6);
+        _radioAll.CheckedChanged += (_, _) => SyncListEnabled();
 
-        _radioList.Text = "仅以下 IP";
+        _radioList.Text = "仅以下 IP（勾选允许）";
         _radioList.AutoSize = true;
-        _radioList.Location = new Point(140, 16);
         _radioList.ForeColor = ForeColor;
         _radioList.Checked = !policy.AllowAll;
-        _radioAll.CheckedChanged += (_, _) => SyncListEnabled();
+        _radioList.Margin = new Padding(0, 0, 0, 8);
         _radioList.CheckedChanged += (_, _) => SyncListEnabled();
 
-        _list.Location = new Point(20, 48);
-        _list.Size = new Size(380, 240);
+        _list.Dock = DockStyle.Fill;
         _list.CheckOnClick = true;
         _list.BackColor = Color.FromArgb(58, 58, 64);
-        _list.ForeColor = Color.Gainsboro;
+        _list.ForeColor = Color.WhiteSmoke;
         _list.BorderStyle = BorderStyle.FixedSingle;
+        _list.IntegralHeight = false;
 
         var known = policy.KnownIps.ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var ip in policy.AllowedIps)
@@ -61,78 +74,35 @@ internal sealed class AllowIpDialog : Form
             _list.Items.Add(ip, isChecked);
         }
 
-        _addBox.Location = new Point(20, 300);
-        _addBox.Width = 220;
-        _addBox.BackColor = Color.FromArgb(58, 58, 64);
-        _addBox.ForeColor = Color.Gainsboro;
-        _addBox.BorderStyle = BorderStyle.FixedSingle;
-        _addBox.PlaceholderText = "例如 192.168.3.10";
-
-        var addBtn = MakeBtn("加入", 250, 298);
-        addBtn.Click += (_, _) => AddIp();
-        var delBtn = MakeBtn("删除所选", 330, 298);
-        delBtn.Click += (_, _) => RemoveSelected();
-
-        var ok = MakeBtn("确定", 230, 360);
-        ok.Width = 80;
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false
+        };
+        var cancel = MakeBtn("取消");
+        cancel.DialogResult = DialogResult.Cancel;
+        var ok = MakeBtn("确定");
         ok.Click += (_, _) =>
         {
             ApplyToPolicy();
             DialogResult = DialogResult.OK;
             Close();
         };
-        var cancel = MakeBtn("取消", 320, 360);
-        cancel.Width = 80;
-        cancel.DialogResult = DialogResult.Cancel;
+        buttons.Controls.Add(cancel);
+        buttons.Controls.Add(ok);
 
-        Controls.Add(_radioAll);
-        Controls.Add(_radioList);
-        Controls.Add(_list);
-        Controls.Add(_addBox);
-        Controls.Add(addBtn);
-        Controls.Add(delBtn);
-        Controls.Add(ok);
-        Controls.Add(cancel);
+        root.Controls.Add(_radioAll, 0, 0);
+        root.Controls.Add(_radioList, 0, 1);
+        root.Controls.Add(_list, 0, 2);
+        root.Controls.Add(buttons, 0, 3);
+        Controls.Add(root);
         AcceptButton = ok;
         CancelButton = cancel;
         SyncListEnabled();
     }
 
-    private void SyncListEnabled()
-    {
-        _list.Enabled = _radioList.Checked;
-        _addBox.Enabled = _radioList.Checked;
-    }
-
-    private void AddIp()
-    {
-        var ip = _addBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(ip))
-        {
-            return;
-        }
-
-        for (var i = 0; i < _list.Items.Count; i++)
-        {
-            if (string.Equals(_list.Items[i]?.ToString(), ip, StringComparison.OrdinalIgnoreCase))
-            {
-                _list.SetItemChecked(i, true);
-                _addBox.Clear();
-                return;
-            }
-        }
-
-        _list.Items.Add(ip, true);
-        _addBox.Clear();
-    }
-
-    private void RemoveSelected()
-    {
-        for (var i = _list.CheckedIndices.Count - 1; i >= 0; i--)
-        {
-            _list.Items.RemoveAt(_list.CheckedIndices[i]);
-        }
-    }
+    private void SyncListEnabled() => _list.Enabled = _radioList.Checked;
 
     private void ApplyToPolicy()
     {
@@ -151,14 +121,15 @@ internal sealed class AllowIpDialog : Form
         _policy.SetAllowed(selected);
     }
 
-    private static Button MakeBtn(string text, int x, int y) => new()
+    private static Button MakeBtn(string text) => new()
     {
         Text = text,
-        Location = new Point(x, y),
-        Width = 70,
-        Height = 30,
+        Width = 88,
+        Height = 34,
+        Margin = new Padding(8, 4, 0, 4),
         FlatStyle = FlatStyle.Flat,
         BackColor = Color.FromArgb(70, 70, 78),
-        ForeColor = Color.Gainsboro
+        ForeColor = Color.Gainsboro,
+        FlatAppearance = { BorderSize = 0 }
     };
 }

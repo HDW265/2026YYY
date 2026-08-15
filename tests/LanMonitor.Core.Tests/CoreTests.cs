@@ -393,3 +393,17 @@ public class ReconnectGateTests
         Assert.True(gate.TryBeginAttempt());
     }
 }
+
+public class PasswordHasherTests
+{
+    [Fact]
+    public void Create_and_verify_roundtrip()
+    {
+        PasswordHasher.Create("secret-pass", out var salt, out var hash);
+        Assert.False(string.IsNullOrEmpty(salt));
+        Assert.False(string.IsNullOrEmpty(hash));
+        Assert.True(PasswordHasher.Verify(salt, hash, "secret-pass"));
+        Assert.False(PasswordHasher.Verify(salt, hash, "wrong"));
+        Assert.False(PasswordHasher.Verify(salt, hash, ""));
+    }
+}

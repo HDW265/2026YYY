@@ -9,10 +9,11 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AssemblyName>局域网监控接收端</AssemblyName>
+    <AssemblyName>SF_view</AssemblyName>
     <RootNamespace>LanMonitor.Receiver</RootNamespace>
-    <Product>局域网监控接收端</Product>
-    <Description>阶段一：收图显示 + 间隔 JPEG 保存</Description>
+    <Product>SF_view</Product>
+    <AssemblyTitle>SF_view</AssemblyTitle>
+    <Description>SF_view</Description>
   </PropertyGroup>
 
   <ItemGroup>

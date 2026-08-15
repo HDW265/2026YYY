@@ -1,14 +1,15 @@
-namespace LanMonitor.Sender;
+namespace LanMonitor.Receiver;
 
-internal sealed class PasswordDialog : Form
+/// <summary>通用密码验证对话框（启动登录 / 托盘打开 / 退出）。</summary>
+internal sealed class AuthDialog : Form
 {
     private readonly TextBox _password = new();
-    private readonly SenderSettings _settings;
+    private readonly Func<string, bool> _verify;
 
-    public PasswordDialog(SenderSettings settings)
+    public AuthDialog(string title, string prompt, Func<string, bool> verify)
     {
-        _settings = settings;
-        Text = "SF_link 验证";
+        _verify = verify;
+        Text = title;
         AutoScaleMode = AutoScaleMode.Dpi;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -34,7 +35,7 @@ internal sealed class PasswordDialog : Form
 
         var label = new Label
         {
-            Text = "输入管理密码以打开设置",
+            Text = prompt,
             AutoSize = true,
             Dock = DockStyle.Fill,
             Margin = new Padding(0, 0, 0, 10)
@@ -70,7 +71,7 @@ internal sealed class PasswordDialog : Form
 
     private void OnOk()
     {
-        if (PasswordHasher.Verify(_settings, _password.Text))
+        if (_verify(_password.Text))
         {
             DialogResult = DialogResult.OK;
             Close();
