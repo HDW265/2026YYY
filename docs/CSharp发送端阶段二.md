@@ -17,6 +17,7 @@
 - 配置目录：`%ProgramData%\SF_link\settings.json`（创建时尽量授予 Users 修改权限，便于其它用户热键改参）
 - **Host 使用 DPAPI（本机 LocalMachine）加密存储**，json 中为 `HostProtected`，无明文 IP；旧版 CurrentUser 密文加载后会重加密
 - 旧版 `%AppData%\SF_link` 或 `%AppData%\局域网监控发送端` 会在当前用户能读到时自动迁移到 `%ProgramData%\SF_link`
+- **图标**：默认深灰底 + 蓝灰「链路」；自定义（重启生效）：exe 同目录 `SF_link.ico` → `%ProgramData%\SF_link\app.ico` → 内嵌默认
 
 ## 截屏
 

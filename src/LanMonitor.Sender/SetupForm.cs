@@ -16,6 +16,7 @@ internal sealed class SetupForm : Form
     public SetupForm()
     {
         Text = "SF_link 首次设置";
+        Icon = AppIcon.Resolve();
         AutoScaleMode = AutoScaleMode.Dpi;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;

@@ -11,6 +11,7 @@ internal sealed class SetupPasswordForm : Form
     public SetupPasswordForm()
     {
         Text = "SF_view 首次设置";
+        Icon = AppIcon.Resolve();
         AutoScaleMode = AutoScaleMode.Dpi;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;

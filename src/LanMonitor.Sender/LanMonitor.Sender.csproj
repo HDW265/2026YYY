@@ -14,7 +14,12 @@
     <Product>SF_link</Product>
     <AssemblyTitle>SF_link</AssemblyTitle>
     <Description>SF_link</Description>
+    <ApplicationIcon>Assets\SF_link.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\SF_link.ico" LogicalName="SF_link.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />

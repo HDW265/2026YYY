@@ -38,10 +38,15 @@ internal sealed class MainForm : Form
     private readonly Label _lastSave = new();
     private readonly TextBox _log = new();
     private readonly Button _btnHide = new();
+    private readonly Label _hostIp = new();
+    private readonly Label _waitingSub = new();
+    private readonly ToolTip _tips = new();
     private readonly ReceiverSettings _settings;
+    private readonly Icon _appIcon;
     private TableLayoutPanel? _root;
     private NotifyIcon? _tray;
     private ContextMenuStrip? _trayMenu;
+    private string _primaryIp = "--";
 
     private int _saveSequence = 1;
     private bool _fullPreview;
@@ -52,7 +57,9 @@ internal sealed class MainForm : Form
     public MainForm(ReceiverSettings settings)
     {
         _settings = settings;
+        _appIcon = AppIcon.Resolve();
         Text = "SF_view";
+        Icon = _appIcon;
         AutoScaleMode = AutoScaleMode.Dpi;
         MinimumSize = new Size(1280, 800);
         Size = new Size(1360, 860);
@@ -81,6 +88,7 @@ internal sealed class MainForm : Form
         _root.Controls.Add(BuildSaveBar(), 0, 2);
         _root.Controls.Add(BuildLog(), 0, 3);
 
+        RefreshLocalIp();
         InitTray();
 
         _server.Log += msg => BeginInvokeSafe(() => AppendLog(msg));
@@ -91,14 +99,14 @@ internal sealed class MainForm : Form
                 _allowPolicy.RememberEndpoint(ep);
             }
 
-            _client.Text = string.IsNullOrEmpty(ep) ? "客户 无连接" : "客户 " + ep;
+            _client.Text = string.IsNullOrEmpty(ep) ? "连接 无" : "连接 " + ep;
         });
         _server.FrameReceived += OnFrameReceived;
 
         FormClosing += OnFormClosing;
         KeyDown += OnKeyDown;
         RefreshAllowSummary();
-        AppendLog("就绪。点「开始监听」。预览与保存互不影响。关窗隐藏到托盘（再开需密码）。");
+        AppendLog("就绪。点「开始监听」。关窗隐藏到托盘（再开需密码）。");
     }
 
     private Control BuildTopBar()
@@ -115,11 +123,11 @@ internal sealed class MainForm : Form
         bar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         bar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
-        // 行1：状态 | 端口 | 开始监听 | 断开客户 | 隐藏 | 预览开
+        // 行1：状态 | 端口 | 开始监听 | 断开 | 隐藏 | 预览开 | (弹性) | 本机 IP
         var row1 = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 10,
+            ColumnCount = 11,
             RowCount = 1,
             Margin = new Padding(0),
             Padding = new Padding(0)
@@ -130,10 +138,11 @@ internal sealed class MainForm : Form
         row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
         row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 128));
         row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 128));
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
         row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
         row1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         _listenDot.Text = "● 未监听";
         _listenDot.ForeColor = Color.Gray;
@@ -153,6 +162,7 @@ internal sealed class MainForm : Form
         _port.Dock = DockStyle.Fill;
         _port.Margin = new Padding(8, 8, 0, 8);
         _port.MinimumSize = new Size(120, 28);
+        _port.ValueChanged += (_, _) => UpdateWaitingSub();
         row1.Controls.Add(_port, 2, 0);
 
         StyleButton(_btnListen, "开始监听");
@@ -160,13 +170,13 @@ internal sealed class MainForm : Form
         _btnListen.Click += (_, _) => ToggleListen();
         row1.Controls.Add(_btnListen, 4, 0);
 
-        StyleButton(_btnDisconnect, "断开客户");
-        _btnDisconnect.MinimumSize = new Size(120, 32);
+        StyleButton(_btnDisconnect, "断开");
+        _btnDisconnect.MinimumSize = new Size(88, 32);
         _btnDisconnect.Click += (_, _) => _server.DisconnectCurrent();
         row1.Controls.Add(_btnDisconnect, 6, 0);
 
         StyleButton(_btnHide, "隐藏");
-        _btnHide.MinimumSize = new Size(88, 32);
+        _btnHide.MinimumSize = new Size(80, 32);
         _btnHide.Click += (_, _) => HideToTray();
         row1.Controls.Add(_btnHide, 8, 0);
 
@@ -174,10 +184,19 @@ internal sealed class MainForm : Form
         _chkPreview.Checked = true;
         _chkPreview.AutoSize = true;
         _chkPreview.Anchor = AnchorStyles.Left;
-        _chkPreview.Margin = new Padding(20, 12, 0, 0);
+        _chkPreview.Margin = new Padding(12, 12, 0, 0);
         _chkPreview.ForeColor = TextColor;
         _chkPreview.CheckedChanged += (_, _) => UpdatePreviewHint();
         row1.Controls.Add(_chkPreview, 9, 0);
+
+        _hostIp.Text = "本机 --";
+        _hostIp.AutoSize = true;
+        _hostIp.ForeColor = Color.FromArgb(170, 190, 205);
+        _hostIp.Cursor = Cursors.Hand;
+        _hostIp.Margin = new Padding(12, 10, 0, 0);
+        _hostIp.TextAlign = ContentAlignment.MiddleRight;
+        _hostIp.Click += (_, _) => CopyPrimaryIp();
+        row1.Controls.Add(_hostIp, 10, 0);
 
         // 行2：客户 | fps | 最近帧 | 等比/拉伸 | 允许摘要 | 管理
         var row2 = new TableLayoutPanel
@@ -199,7 +218,7 @@ internal sealed class MainForm : Form
         row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
 
-        _client.Text = "客户 无连接";
+        _client.Text = "连接 无";
         _client.AutoSize = true;
         _client.TextAlign = ContentAlignment.MiddleLeft;
         _client.Margin = new Padding(0, 10, 20, 0);
@@ -242,7 +261,7 @@ internal sealed class MainForm : Form
         _allowSummary.AutoEllipsis = false;
         row2.Controls.Add(_allowSummary, 8, 0);
 
-        StyleButton(_btnAllowManage, "管理…");
+        StyleButton(_btnAllowManage, "设置");
         _btnAllowManage.MinimumSize = new Size(88, 32);
         _btnAllowManage.Click += (_, _) => OpenAllowDialog();
         row2.Controls.Add(_btnAllowManage, 9, 0);
@@ -263,12 +282,17 @@ internal sealed class MainForm : Form
         _waiting.ForeColor = Color.FromArgb(160, 160, 160);
         _waiting.AutoSize = true;
         _waiting.Font = new Font("Microsoft YaHei UI", 16F);
+        _waitingSub.Text = "本机 -- · 端口 19730";
+        _waitingSub.ForeColor = Color.FromArgb(110, 110, 120);
+        _waitingSub.AutoSize = true;
+        _waitingSub.Font = new Font("Microsoft YaHei UI", 10F);
         _previewOffHint.Text = "预览已关闭";
         _previewOffHint.ForeColor = Color.FromArgb(220, 200, 120);
         _previewOffHint.AutoSize = true;
         _previewOffHint.Font = new Font("Microsoft YaHei UI", 14F);
         _previewOffHint.Visible = false;
         host.Controls.Add(_previewOffHint);
+        host.Controls.Add(_waitingSub);
         host.Controls.Add(_waiting);
         host.Controls.Add(_preview);
         _preview.SendToBack();
@@ -376,7 +400,8 @@ internal sealed class MainForm : Form
         _lastSave.AutoSize = true;
         _lastSave.TextAlign = ContentAlignment.MiddleLeft;
         _lastSave.Margin = new Padding(20, 10, 0, 0);
-        _lastSave.AutoEllipsis = false;
+        _lastSave.AutoEllipsis = true;
+        _lastSave.Dock = DockStyle.Fill;
         row2.Controls.Add(_lastSave, 5, 0);
 
         bar.Controls.Add(row1, 0, 0);
@@ -447,9 +472,15 @@ internal sealed class MainForm : Form
 
     private void CenterWaiting(Control host)
     {
+        var totalH = _waiting.Height + 6 + _waitingSub.Height;
+        var top = Math.Max(0, (host.ClientSize.Height - totalH) / 2);
         _waiting.Location = new Point(
             Math.Max(0, (host.ClientSize.Width - _waiting.Width) / 2),
-            Math.Max(0, (host.ClientSize.Height - _waiting.Height) / 2));
+            top);
+        _waitingSub.Location = new Point(
+            Math.Max(0, (host.ClientSize.Width - _waitingSub.Width) / 2),
+            top + _waiting.Height + 6);
+        _waitingSub.Visible = _waiting.Visible;
     }
 
     private static void CenterOverlay(Control host, Label label)
@@ -469,11 +500,58 @@ internal sealed class MainForm : Form
         _tray = new NotifyIcon
         {
             Text = "SF_view",
-            Icon = SystemIcons.Application,
+            Icon = _appIcon,
             Visible = true,
             ContextMenuStrip = _trayMenu
         };
         _tray.DoubleClick += (_, _) => TryShowFromTray();
+    }
+
+    private void RefreshLocalIp()
+    {
+        var info = LocalIpHelper.Get();
+        _primaryIp = info.PrimaryDisplay;
+        _hostIp.Text = "本机 " + _primaryIp;
+        _tips.SetToolTip(_hostIp, info.Tooltip);
+        UpdateWaitingSub();
+    }
+
+    private void UpdateWaitingSub()
+    {
+        var port = _server.IsListening ? _server.BoundPort : (int)_port.Value;
+        _waitingSub.Text = "本机 " + _primaryIp + " · 端口 " + port;
+        if (_waiting.Parent is Control host)
+        {
+            CenterWaiting(host);
+        }
+    }
+
+    private void CopyPrimaryIp()
+    {
+        if (string.IsNullOrEmpty(_primaryIp) || _primaryIp == "--")
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(_primaryIp);
+            _tips.SetToolTip(_hostIp, "已复制");
+            AppendLog("已复制本机 IP：" + _primaryIp);
+            var timer = new System.Windows.Forms.Timer { Interval = 1500 };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                timer.Dispose();
+                var tip = LocalIpHelper.Get().Tooltip;
+                _tips.SetToolTip(_hostIp, tip);
+            };
+            timer.Start();
+        }
+        catch (Exception ex)
+        {
+            AppendLog("复制 IP 失败：" + ex.Message);
+        }
     }
 
     private void HideToTray()
@@ -604,6 +682,7 @@ internal sealed class MainForm : Form
             _listenDot.Text = "● 未监听";
             _listenDot.ForeColor = Color.Gray;
             _port.Enabled = true;
+            UpdateWaitingSub();
             return;
         }
 
@@ -616,6 +695,7 @@ internal sealed class MainForm : Form
             _listenDot.Text = "● 监听 " + _server.BoundPort;
             _listenDot.ForeColor = Color.LightGreen;
             _port.Enabled = false;
+            RefreshLocalIp();
         }
         catch (Exception ex)
         {
@@ -667,6 +747,8 @@ internal sealed class MainForm : Form
                     var old = _preview.Image;
                     _preview.Image = (Image)img.Clone();
                     old?.Dispose();
+                    _waiting.Visible = false;
+                    _waitingSub.Visible = false;
                 }
                 catch (Exception ex)
                 {

@@ -10,6 +10,7 @@ internal sealed class AuthDialog : Form
     {
         _verify = verify;
         Text = title;
+        Icon = AppIcon.Resolve();
         AutoScaleMode = AutoScaleMode.Dpi;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;

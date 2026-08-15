@@ -12,7 +12,8 @@ internal sealed class AllowIpDialog : Form
     public AllowIpDialog(AllowIpPolicy policy)
     {
         _policy = policy;
-        Text = "允许的客户";
+        Text = "允许连接";
+        Icon = AppIcon.Resolve();
         AutoScaleMode = AutoScaleMode.Dpi;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;

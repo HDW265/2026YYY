@@ -14,7 +14,12 @@
     <Product>SF_view</Product>
     <AssemblyTitle>SF_view</AssemblyTitle>
     <Description>SF_view</Description>
+    <ApplicationIcon>Assets\SF_view.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\SF_view.ico" LogicalName="SF_view.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\LanMonitor.Core\LanMonitor.Core.csproj" />

@@ -43,6 +43,7 @@ internal sealed class MainForm : Form
         _session = session;
 
         Text = "SF_link 设置";
+        Icon = AppIcon.Resolve();
         AutoScaleMode = AutoScaleMode.Dpi;
         MinimumSize = new Size(920, 720);
         Size = new Size(1000, 780);

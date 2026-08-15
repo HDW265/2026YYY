@@ -9,6 +9,7 @@ internal sealed class PasswordDialog : Form
     {
         _settings = settings;
         Text = "SF_link 验证";
+        Icon = AppIcon.Resolve();
         AutoScaleMode = AutoScaleMode.Dpi;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
