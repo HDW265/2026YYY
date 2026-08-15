@@ -461,15 +461,12 @@ internal sealed class MainForm : Form
         var want = _chkAutoStart.Checked;
         if (!AutoStartService.TryApplyWithElevation(want, out var error))
         {
-            MessageBox.Show(this,
-                string.IsNullOrEmpty(error)
-                    ? "修改开机自启失败，需要管理员权限。"
-                    : error,
-                Text,
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
+            var detail = string.IsNullOrEmpty(error)
+                ? "修改开机自启失败（原因未知）。"
+                : error;
+            MessageBox.Show(this, detail, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             SyncAutoStartCheckbox();
-            AppendLog("开机自启未更改：" + (string.IsNullOrEmpty(error) ? "需要管理员权限" : error));
+            AppendLog("开机自启未更改：" + detail.Replace('\n', ' '));
             return;
         }
 

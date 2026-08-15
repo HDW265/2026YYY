@@ -12,7 +12,7 @@
 - **无托盘**；热键 **`Ctrl+Shift+Alt+M`** + 密码打开设置
 - 首次设置 → 保存后后台连接；关窗=隐藏；「退出程序」才结束
 - 设置窗增加 **「开机自启」**（勾选控制）：写入  
-  `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`，值名 **`SF_link`** = 当前 exe 路径（需 UAC）。不写 WOW6432Node；会清理旧的 `SF_Link` / WOW 项。
+  `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`，值名 **`SF_link`** = 当前 exe 路径（需 UAC）。不写 WOW6432Node；仅清理 WOW 下旧项（不会因大小写误删刚写入的 `SF_link`）。
 - 配置目录：`%AppData%\SF_link\settings.json`
 - **Host 使用 DPAPI（当前用户）加密存储**，json 中为 `HostProtected`，无明文 IP
 - 旧版 `%AppData%\局域网监控发送端` 会自动迁移到 `SF_link` 并加密 Host
