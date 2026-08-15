@@ -34,7 +34,11 @@ dotnet publish src\LanMonitor.Receiver\LanMonitor.Receiver.csproj -c Release -r 
 
 生成：`publish\win-x64\局域网监控接收端.exe`，拷到另一台 Windows 即可，不必安装 .NET。
 
-## 与易语言被控对接
+## 与 C# 发送端对接（阶段二，推荐）
+
+协议：**4 字节小端长度 + JPEG**。接收端先监听，发送端填本机 IP / `19730` 连接。详见 `docs/CSharp发送端阶段二.md`。
+
+## 与易语言被控对接（兼容）
 
 1. 接收端先「开始监听」（默认端口 **19730**；易语言被控「端口」编辑框也要填同一端口，且主机 IP 指向本机）
 2. 允许IP 留空=全部；若要白名单填如 `192.168.111.59`
@@ -44,9 +48,10 @@ dotnet publish src\LanMonitor.Receiver\LanMonitor.Receiver.csproj -c Release -r 
 ## 本地自测发送（可选）
 
 ```bat
-dotnet run --project src\LanMonitor.TestSender -- 127.0.0.1 19730 jpeg
-dotnet run --project src\LanMonitor.TestSender -- 127.0.0.1 19730 bmp
+dotnet run --project src\LanMonitor.TestSender -- 127.0.0.1 19730 5
 ```
+
+（长度前缀 JPEG；第三参数为帧率）
 
 ## 快捷键
 

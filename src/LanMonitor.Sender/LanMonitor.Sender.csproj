@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>局域网监控发送端</AssemblyName>
+    <RootNamespace>LanMonitor.Sender</RootNamespace>
+    <Product>局域网监控发送端</Product>
+    <Description>阶段二：截屏 JPEG + 长度前缀 TCP 推流</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LanMonitor.Core\LanMonitor.Core.csproj" />
+  </ItemGroup>
+
+</Project>
