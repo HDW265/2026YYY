@@ -43,13 +43,14 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "局域网监控 · 接收端";
-        MinimumSize = new Size(1200, 760);
-        Size = new Size(1280, 820);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        MinimumSize = new Size(1280, 800);
+        Size = new Size(1360, 860);
         StartPosition = FormStartPosition.CenterScreen;
         KeyPreview = true;
         BackColor = FormBack;
         ForeColor = TextColor;
-        Font = new Font("Microsoft YaHei UI", 9F);
+        Font = new Font("Microsoft YaHei UI", 9.75F);
 
         _root = new TableLayoutPanel
         {
@@ -59,10 +60,11 @@ public sealed class MainForm : Form
             Padding = new Padding(0),
             Margin = new Padding(0)
         };
-        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
+        // 加高顶栏/保存栏，避免高 DPI 下文字上下被裁
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
         _root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
-        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
         Controls.Add(_root);
 
         _root.Controls.Add(BuildTopBar(), 0, 0);
@@ -90,13 +92,14 @@ public sealed class MainForm : Form
             BackColor = BarBack,
             ColumnCount = 1,
             RowCount = 2,
-            Padding = new Padding(12, 10, 12, 10),
+            Padding = new Padding(14, 10, 14, 10),
             Margin = new Padding(0)
         };
-        bar.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        bar.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
-        // 行1：状态 | 端口 | 开始 | 断开 | 接收开
+        // 行1：状态 | 端口 | 数值 | 开始 | 断开 | 接收开
+        // 标签列用 AutoSize，避免「端口」「未监听」被裁成省略号
         var row1 = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -105,29 +108,33 @@ public sealed class MainForm : Form
             Margin = new Padding(0),
             Padding = new Padding(0)
         };
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120)); // status
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));  // 端口 label
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110)); // port
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 12));  // gap
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 108)); // listen
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 12));
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 108)); // disconnect
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));  // receive
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));       // status
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));       // 端口
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));  // port box（五位+箭头）
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));  // listen
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));  // disconnect
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));   // receive
 
         _listenDot.Text = "● 未监听";
         _listenDot.ForeColor = Color.Gray;
-        _listenDot.Dock = DockStyle.Fill;
+        _listenDot.AutoSize = true;
         _listenDot.TextAlign = ContentAlignment.MiddleLeft;
+        _listenDot.Margin = new Padding(0, 10, 16, 0);
+        _listenDot.AutoEllipsis = false;
         row1.Controls.Add(_listenDot, 0, 0);
 
-        row1.Controls.Add(MakeLabel("端口", ContentAlignment.MiddleRight), 1, 0);
+        row1.Controls.Add(MakeCaption("端口"), 1, 0);
 
         StyleNumeric(_port);
         _port.Minimum = 1;
         _port.Maximum = 65535;
         _port.Value = 19730;
-        _port.Width = 100;
+        _port.ThousandsSeparator = false;
         _port.Dock = DockStyle.Fill;
+        _port.Margin = new Padding(8, 8, 0, 8);
+        _port.MinimumSize = new Size(120, 28);
         row1.Controls.Add(_port, 2, 0);
 
         StyleButton(_btnListen, "开始监听");
@@ -141,8 +148,8 @@ public sealed class MainForm : Form
         _chkReceive.Text = "接收开";
         _chkReceive.Checked = true;
         _chkReceive.AutoSize = true;
-        _chkReceive.Dock = DockStyle.Left;
-        _chkReceive.Margin = new Padding(16, 8, 0, 0);
+        _chkReceive.Anchor = AnchorStyles.Left;
+        _chkReceive.Margin = new Padding(20, 12, 0, 0);
         _chkReceive.ForeColor = TextColor;
         _chkReceive.CheckedChanged += (_, _) => _server.ReceiveEnabled = _chkReceive.Checked;
         row1.Controls.Add(_chkReceive, 7, 0);
@@ -156,53 +163,58 @@ public sealed class MainForm : Form
             Margin = new Padding(0),
             Padding = new Padding(0)
         };
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260)); // client
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));  // fps
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140)); // frame size
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));  // zoom
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));  // stretch
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 16));
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));  // allow label
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));  // allow ip
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 20));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 20));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         _client.Text = "客户 无连接";
-        _client.Dock = DockStyle.Fill;
+        _client.AutoSize = true;
         _client.TextAlign = ContentAlignment.MiddleLeft;
+        _client.Margin = new Padding(0, 10, 20, 0);
+        _client.AutoEllipsis = false;
         row2.Controls.Add(_client, 0, 0);
 
         _fpsLabel.Text = "0 fps";
-        _fpsLabel.Dock = DockStyle.Fill;
+        _fpsLabel.AutoSize = true;
         _fpsLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _fpsLabel.Margin = new Padding(0, 10, 20, 0);
+        _fpsLabel.AutoEllipsis = false;
         row2.Controls.Add(_fpsLabel, 1, 0);
 
         _frameSize.Text = "最近帧 --";
-        _frameSize.Dock = DockStyle.Fill;
+        _frameSize.AutoSize = true;
         _frameSize.TextAlign = ContentAlignment.MiddleLeft;
+        _frameSize.Margin = new Padding(0, 10, 12, 0);
+        _frameSize.AutoEllipsis = false;
         row2.Controls.Add(_frameSize, 2, 0);
 
         _radioZoom.Text = "等比";
         _radioZoom.Checked = true;
         _radioZoom.AutoSize = true;
-        _radioZoom.Dock = DockStyle.Left;
-        _radioZoom.Margin = new Padding(0, 8, 0, 0);
+        _radioZoom.Margin = new Padding(0, 10, 12, 0);
         _radioZoom.ForeColor = TextColor;
         _radioZoom.CheckedChanged += (_, _) => ApplySizeMode();
         row2.Controls.Add(_radioZoom, 4, 0);
 
         _radioStretch.Text = "拉伸";
         _radioStretch.AutoSize = true;
-        _radioStretch.Dock = DockStyle.Left;
-        _radioStretch.Margin = new Padding(0, 8, 0, 0);
+        _radioStretch.Margin = new Padding(0, 10, 12, 0);
         _radioStretch.ForeColor = TextColor;
         row2.Controls.Add(_radioStretch, 5, 0);
 
-        row2.Controls.Add(MakeLabel("允许IP", ContentAlignment.MiddleRight), 7, 0);
+        row2.Controls.Add(MakeCaption("允许IP"), 7, 0);
 
         StyleTextBox(_allowIp);
         _allowIp.PlaceholderText = "空=全部";
         _allowIp.Dock = DockStyle.Fill;
-        _allowIp.Margin = new Padding(8, 6, 0, 6);
+        _allowIp.Margin = new Padding(8, 8, 0, 8);
+        _allowIp.MinimumSize = new Size(160, 28);
         _allowIp.TextChanged += (_, _) => _server.AllowList = _allowIp.Text;
         row2.Controls.Add(_allowIp, 8, 0);
 
@@ -238,11 +250,11 @@ public sealed class MainForm : Form
             BackColor = BarBack,
             ColumnCount = 1,
             RowCount = 2,
-            Padding = new Padding(12, 8, 12, 8),
+            Padding = new Padding(14, 8, 14, 8),
             Margin = new Padding(0)
         };
-        bar.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        bar.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
         // 行1：保存 | 目录 | 路径 | 浏览
         var row1 = new TableLayoutPanel
@@ -252,25 +264,25 @@ public sealed class MainForm : Form
             RowCount = 1,
             Margin = new Padding(0)
         };
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 72));
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         row1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
+        row1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
 
         _chkSave.Text = "保存";
         _chkSave.Checked = true;
         _chkSave.AutoSize = true;
-        _chkSave.Dock = DockStyle.Left;
-        _chkSave.Margin = new Padding(0, 8, 0, 0);
+        _chkSave.Margin = new Padding(0, 10, 16, 0);
         _chkSave.ForeColor = TextColor;
         row1.Controls.Add(_chkSave, 0, 0);
 
-        row1.Controls.Add(MakeLabel("目录", ContentAlignment.MiddleRight), 1, 0);
+        row1.Controls.Add(MakeCaption("目录"), 1, 0);
 
         StyleTextBox(_directory);
         _directory.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "局域网监控");
         _directory.Dock = DockStyle.Fill;
-        _directory.Margin = new Padding(8, 6, 8, 6);
+        _directory.Margin = new Padding(8, 8, 8, 8);
+        _directory.MinimumSize = new Size(200, 28);
         row1.Controls.Add(_directory, 2, 0);
 
         var browse = new Button();
@@ -286,14 +298,14 @@ public sealed class MainForm : Form
             RowCount = 1,
             Margin = new Padding(0)
         };
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 36));
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 52));
-        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        row2.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
         row2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        row2.Controls.Add(MakeLabel("间隔", ContentAlignment.MiddleRight), 0, 0);
+        row2.Controls.Add(MakeCaption("间隔"), 0, 0);
 
         StyleNumeric(_interval);
         _interval.DecimalPlaces = 1;
@@ -302,26 +314,28 @@ public sealed class MainForm : Form
         _interval.Increment = 0.1M;
         _interval.Value = 1.0M;
         _interval.Dock = DockStyle.Fill;
-        _interval.Margin = new Padding(8, 6, 4, 6);
+        _interval.Margin = new Padding(8, 8, 4, 8);
+        _interval.MinimumSize = new Size(90, 28);
         _interval.ValueChanged += (_, _) => _saveScheduler.IntervalSeconds = (double)_interval.Value;
         row2.Controls.Add(_interval, 1, 0);
 
-        row2.Controls.Add(MakeLabel("秒", ContentAlignment.MiddleLeft), 2, 0);
-
-        row2.Controls.Add(MakeLabel("质量", ContentAlignment.MiddleRight), 3, 0);
+        row2.Controls.Add(MakeCaption("秒", padLeft: 4, padRight: 20), 2, 0);
+        row2.Controls.Add(MakeCaption("质量"), 3, 0);
 
         StyleNumeric(_quality);
         _quality.Minimum = 1;
         _quality.Maximum = 100;
         _quality.Value = 60;
         _quality.Dock = DockStyle.Fill;
-        _quality.Margin = new Padding(8, 6, 8, 6);
+        _quality.Margin = new Padding(8, 8, 8, 8);
+        _quality.MinimumSize = new Size(90, 28);
         row2.Controls.Add(_quality, 4, 0);
 
         _lastSave.Text = "最近写入 --";
-        _lastSave.Dock = DockStyle.Fill;
+        _lastSave.AutoSize = true;
         _lastSave.TextAlign = ContentAlignment.MiddleLeft;
-        _lastSave.Margin = new Padding(16, 0, 0, 0);
+        _lastSave.Margin = new Padding(20, 10, 0, 0);
+        _lastSave.AutoEllipsis = false;
         row2.Controls.Add(_lastSave, 5, 0);
 
         bar.Controls.Add(row1, 0, 0);
@@ -350,14 +364,14 @@ public sealed class MainForm : Form
         return host;
     }
 
-    private static Label MakeLabel(string text, ContentAlignment align) => new()
+    private static Label MakeCaption(string text, int padLeft = 0, int padRight = 8) => new()
     {
         Text = text,
-        Dock = DockStyle.Fill,
-        TextAlign = align,
+        AutoSize = true,
+        TextAlign = ContentAlignment.MiddleLeft,
         ForeColor = TextColor,
-        Margin = new Padding(0),
-        AutoEllipsis = true
+        Margin = new Padding(padLeft, 10, padRight, 0),
+        AutoEllipsis = false
     };
 
     private static void StyleButton(Button button, string text)
@@ -368,8 +382,10 @@ public sealed class MainForm : Form
         button.FlatAppearance.BorderSize = 0;
         button.BackColor = ButtonBack;
         button.ForeColor = TextColor;
-        button.Margin = new Padding(0, 4, 0, 4);
+        button.Margin = new Padding(0, 6, 0, 6);
         button.Cursor = Cursors.Hand;
+        button.MinimumSize = new Size(100, 32);
+        button.AutoEllipsis = false;
     }
 
     private static void StyleNumeric(NumericUpDown box)
@@ -378,6 +394,7 @@ public sealed class MainForm : Form
         box.BackColor = InputBack;
         box.ForeColor = TextColor;
         box.TextAlign = HorizontalAlignment.Left;
+        box.ThousandsSeparator = false;
     }
 
     private static void StyleTextBox(TextBox box)
