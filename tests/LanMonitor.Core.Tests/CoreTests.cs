@@ -53,6 +53,38 @@ public class FrameAssemblerTests
     }
 
     [Fact]
+    public void Assembles_length_prefixed_bmp()
+    {
+        var bmp = MakeBmp(48, 36);
+        var packet = new byte[4 + bmp.Length];
+        BitConverter.GetBytes(bmp.Length).CopyTo(packet, 0);
+        Buffer.BlockCopy(bmp, 0, packet, 4, bmp.Length);
+        var assembler = new FrameAssembler();
+        var mid = packet.Length / 2;
+        Assert.Empty(assembler.Push(packet.AsSpan(0, mid)));
+        var frames = assembler.Push(packet.AsSpan(mid));
+        Assert.Single(frames);
+        Assert.Equal(bmp, frames[0]);
+    }
+
+    [Fact]
+    public void Does_not_treat_ffd8_inside_bmp_pixels_as_jpeg()
+    {
+        using var image = new Image<Rgb24>(64, 48);
+        image[3, 3] = new Rgb24(255, 216, 0);
+        image[4, 3] = new Rgb24(255, 217, 0);
+        using var ms = new MemoryStream();
+        image.Save(ms, new BmpEncoder());
+        var bmp = ms.ToArray();
+        var assembler = new FrameAssembler();
+        var frames = assembler.Push(bmp);
+        Assert.Single(frames);
+        Assert.Equal((byte)'B', frames[0][0]);
+        Assert.Equal((byte)'M', frames[0][1]);
+        Assert.Equal(bmp.Length, frames[0].Length);
+    }
+
+    [Fact]
     public void Ignores_incomplete_jpeg_without_eoi()
     {
         var jpeg = MakeJpeg(16, 16, 70);
@@ -145,6 +177,42 @@ public class JpegFileSaverTests
         Assert.True(File.Exists(path));
         Assert.True(result.Bytes > 1000);
         Assert.True(result.Bytes < bmp.Length / 2, $"jpeg={result.Bytes} bmp={bmp.Length}");
+    }
+}
+
+public class ImagePayloadTests
+{
+    [Fact]
+    public void Unwraps_four_byte_length_prefix()
+    {
+        var bmp = MakeSmallBmp();
+        var packet = new byte[4 + bmp.Length];
+        BitConverter.GetBytes(bmp.Length).CopyTo(packet, 0);
+        Buffer.BlockCopy(bmp, 0, packet, 4, bmp.Length);
+        Assert.True(ImagePayload.TryUnwrap(packet, out var image));
+        Assert.Equal((byte)'B', image[0]);
+        Assert.True(ImagePayload.TryEncodeJpeg(packet, 60, out var jpeg, out var error), error);
+        Assert.True(jpeg.Length > 100);
+        Assert.True(jpeg.Length < bmp.Length);
+    }
+
+    [Fact]
+    public void Wraps_raw_dib_header()
+    {
+        var bmp = MakeSmallBmp();
+        var dib = bmp.AsSpan(14).ToArray();
+        Assert.Equal(40, BitConverter.ToInt32(dib, 0));
+        Assert.True(ImagePayload.TryUnwrap(dib, out var wrapped));
+        Assert.Equal((byte)'B', wrapped[0]);
+        Assert.Equal((byte)'M', wrapped[1]);
+    }
+
+    private static byte[] MakeSmallBmp()
+    {
+        using var image = new Image<Rgb24>(32, 24);
+        using var ms = new MemoryStream();
+        image.Save(ms, new BmpEncoder());
+        return ms.ToArray();
     }
 }
 

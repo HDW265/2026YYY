@@ -11,7 +11,7 @@ public sealed class TcpReceiveServer : IDisposable
     private TcpClient? _currentTcp;
     private int _accepting;
 
-    public int Port { get; set; } = 13689;
+    public int Port { get; set; } = 19730;
     public int BoundPort { get; private set; }
     public string AllowList { get; set; } = string.Empty;
     public bool ReceiveEnabled { get; set; } = true;

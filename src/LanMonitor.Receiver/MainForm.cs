@@ -31,12 +31,13 @@ public sealed class MainForm : Form
 
     private int _saveSequence = 1;
     private bool _fullPreview;
+    private DateTime _lastFailLogUtc = DateTime.MinValue;
 
     public MainForm()
     {
         Text = "局域网监控 · 接收端";
-        MinimumSize = new Size(1100, 700);
-        Size = new Size(1280, 800);
+        MinimumSize = new Size(1100, 720);
+        Size = new Size(1280, 820);
         StartPosition = FormStartPosition.CenterScreen;
         KeyPreview = true;
         BackColor = Color.FromArgb(32, 32, 36);
@@ -50,10 +51,10 @@ public sealed class MainForm : Form
             RowCount = 4,
             Padding = new Padding(0)
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
         Controls.Add(root);
 
         root.Controls.Add(BuildTopBar(), 0, 0);
@@ -70,83 +71,107 @@ public sealed class MainForm : Form
 
         FormClosing += (_, _) => _server.Dispose();
         KeyDown += OnKeyDown;
-        AppendLog("就绪。点击「开始监听」等待被控端连接。间隔和质量在下方直接改，立即生效。");
+        AppendLog("就绪。点「开始监听」。默认端口 19730（13689 在本机常被系统保留）。");
     }
 
     private Control BuildTopBar()
     {
-        var bar = new FlowLayoutPanel
+        var bar = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(45, 45, 50),
-            Padding = new Padding(10, 10, 10, 8),
-            WrapContents = false
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(10, 8, 10, 8)
+        };
+        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+
+        var row1 = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            WrapContents = false,
+            AutoSize = false
+        };
+        var row2 = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            WrapContents = false,
+            AutoSize = false
         };
 
         _listenDot.AutoSize = true;
         _listenDot.Text = "● 未监听";
         _listenDot.ForeColor = Color.Gray;
         _listenDot.Margin = new Padding(0, 6, 12, 0);
-        bar.Controls.Add(_listenDot);
+        row1.Controls.Add(_listenDot);
 
-        bar.Controls.Add(LabelOf("端口"));
+        row1.Controls.Add(LabelOf("端口"));
         _port.Minimum = 1;
         _port.Maximum = 65535;
-        _port.Value = 13689;
-        _port.Width = 80;
-        _port.Margin = new Padding(4, 4, 8, 0);
-        bar.Controls.Add(_port);
+        _port.Value = 19730;
+        _port.Width = 90;
+        _port.Height = 26;
+        _port.Margin = new Padding(4, 3, 8, 0);
+        row1.Controls.Add(_port);
 
         _btnListen.Text = "开始监听";
         _btnListen.AutoSize = true;
+        _btnListen.Height = 28;
+        _btnListen.Margin = new Padding(4, 2, 6, 0);
         _btnListen.Click += (_, _) => ToggleListen();
-        bar.Controls.Add(_btnListen);
+        row1.Controls.Add(_btnListen);
 
         _btnDisconnect.Text = "断开客户";
         _btnDisconnect.AutoSize = true;
+        _btnDisconnect.Height = 28;
+        _btnDisconnect.Margin = new Padding(4, 2, 6, 0);
         _btnDisconnect.Click += (_, _) => _server.DisconnectCurrent();
-        bar.Controls.Add(_btnDisconnect);
+        row1.Controls.Add(_btnDisconnect);
 
         _chkReceive.Text = "接收开";
         _chkReceive.Checked = true;
         _chkReceive.AutoSize = true;
         _chkReceive.Margin = new Padding(12, 6, 8, 0);
         _chkReceive.CheckedChanged += (_, _) => _server.ReceiveEnabled = _chkReceive.Checked;
-        bar.Controls.Add(_chkReceive);
+        row1.Controls.Add(_chkReceive);
 
         _client.AutoSize = true;
         _client.Text = "客户 无连接";
-        _client.Margin = new Padding(16, 6, 12, 0);
-        bar.Controls.Add(_client);
+        _client.Margin = new Padding(0, 6, 16, 0);
+        row2.Controls.Add(_client);
 
         _fpsLabel.AutoSize = true;
         _fpsLabel.Text = "0 fps";
-        _fpsLabel.Margin = new Padding(8, 6, 12, 0);
-        bar.Controls.Add(_fpsLabel);
+        _fpsLabel.Margin = new Padding(8, 6, 16, 0);
+        row2.Controls.Add(_fpsLabel);
 
         _frameSize.AutoSize = true;
         _frameSize.Text = "最近帧 --";
-        _frameSize.Margin = new Padding(8, 6, 12, 0);
-        bar.Controls.Add(_frameSize);
+        _frameSize.Margin = new Padding(8, 6, 16, 0);
+        row2.Controls.Add(_frameSize);
 
         _radioZoom.Text = "等比";
         _radioZoom.Checked = true;
         _radioZoom.AutoSize = true;
-        _radioZoom.Margin = new Padding(16, 6, 4, 0);
+        _radioZoom.Margin = new Padding(8, 6, 4, 0);
         _radioZoom.CheckedChanged += (_, _) => ApplySizeMode();
         _radioStretch.Text = "拉伸";
         _radioStretch.AutoSize = true;
-        _radioStretch.Margin = new Padding(4, 6, 8, 0);
-        bar.Controls.Add(_radioZoom);
-        bar.Controls.Add(_radioStretch);
+        _radioStretch.Margin = new Padding(4, 6, 12, 0);
+        row2.Controls.Add(_radioZoom);
+        row2.Controls.Add(_radioStretch);
 
-        bar.Controls.Add(LabelOf("允许IP"));
-        _allowIp.Width = 160;
+        row2.Controls.Add(LabelOf("允许IP"));
+        _allowIp.Width = 180;
+        _allowIp.Height = 26;
         _allowIp.PlaceholderText = "空=全部";
-        _allowIp.Margin = new Padding(4, 4, 0, 0);
+        _allowIp.Margin = new Padding(4, 3, 0, 0);
         _allowIp.TextChanged += (_, _) => _server.AllowList = _allowIp.Text;
-        bar.Controls.Add(_allowIp);
+        row2.Controls.Add(_allowIp);
 
+        bar.Controls.Add(row1, 0, 0);
+        bar.Controls.Add(row2, 0, 1);
         return bar;
     }
 
@@ -177,25 +202,32 @@ public sealed class MainForm : Form
             BackColor = Color.FromArgb(45, 45, 50),
             ColumnCount = 1,
             RowCount = 2,
-            Padding = new Padding(10, 6, 10, 6)
+            Padding = new Padding(10, 8, 10, 6)
         };
-        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
-        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+        bar.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        bar.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
 
-        var row = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+        var row = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            WrapContents = false,
+            AutoSize = false
+        };
+
         _chkSave.Text = "保存";
         _chkSave.Checked = true;
         _chkSave.AutoSize = true;
-        _chkSave.Margin = new Padding(0, 6, 12, 0);
+        _chkSave.Margin = new Padding(0, 8, 10, 0);
         row.Controls.Add(_chkSave);
 
         row.Controls.Add(LabelOf("目录"));
-        _directory.Width = 420;
+        _directory.Width = 380;
+        _directory.Height = 26;
         _directory.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "局域网监控");
         _directory.Margin = new Padding(4, 4, 6, 0);
         row.Controls.Add(_directory);
 
-        var browse = new Button { Text = "浏览", AutoSize = true };
+        var browse = new Button { Text = "浏览", AutoSize = true, Height = 28, Margin = new Padding(0, 3, 12, 0) };
         browse.Click += (_, _) => BrowseDirectory();
         row.Controls.Add(browse);
 
@@ -206,6 +238,7 @@ public sealed class MainForm : Form
         _interval.Increment = 0.1M;
         _interval.Value = 1.0M;
         _interval.Width = 70;
+        _interval.Height = 26;
         _interval.Margin = new Padding(4, 4, 4, 0);
         _interval.ValueChanged += (_, _) => _saveScheduler.IntervalSeconds = (double)_interval.Value;
         row.Controls.Add(_interval);
@@ -216,6 +249,7 @@ public sealed class MainForm : Form
         _quality.Maximum = 100;
         _quality.Value = 60;
         _quality.Width = 70;
+        _quality.Height = 26;
         _quality.Margin = new Padding(12, 4, 4, 0);
         row.Controls.Add(_quality);
 
@@ -223,6 +257,7 @@ public sealed class MainForm : Form
         _lastSave.Text = "最近写入 --";
         _lastSave.Dock = DockStyle.Fill;
         _lastSave.TextAlign = ContentAlignment.MiddleLeft;
+        _lastSave.Margin = new Padding(0, 2, 0, 0);
         bar.Controls.Add(_lastSave, 0, 1);
         _saveScheduler.IntervalSeconds = (double)_interval.Value;
         return bar;
@@ -305,6 +340,12 @@ public sealed class MainForm : Form
     {
         BeginInvokeSafe(() =>
         {
+            if (!ImagePayload.TryEncodeJpeg(frame, (int)_quality.Value, out var jpeg, out var error))
+            {
+                LogFail("预览/保存失败: " + error + "  原始=" + FormatBytes(frame.Length));
+                return;
+            }
+
             _waiting.Visible = false;
             _fps.Tick();
             _fpsLabel.Text = _fps.Fps.ToString("0") + " fps";
@@ -312,7 +353,7 @@ public sealed class MainForm : Form
 
             try
             {
-                using var ms = new MemoryStream(frame, writable: false);
+                using var ms = new MemoryStream(jpeg, writable: false);
                 using var img = Image.FromStream(ms);
                 var old = _preview.Image;
                 _preview.Image = (Image)img.Clone();
@@ -320,7 +361,8 @@ public sealed class MainForm : Form
             }
             catch (Exception ex)
             {
-                AppendLog("预览失败: " + ex.Message);
+                LogFail("预览失败: " + ex.Message);
+                return;
             }
 
             if (!_chkSave.Checked)
@@ -337,20 +379,11 @@ public sealed class MainForm : Form
             try
             {
                 var path = JpegFileSaver.BuildPath(_directory.Text, _saveSequence);
-                var result = JpegFileSaver.Save(frame, path, (int)_quality.Value);
-                if (result.Success)
-                {
-                    _saveSequence++;
-                    _lastSave.ForeColor = Color.Gainsboro;
-                    _lastSave.Text = "最近写入 " + Path.GetFileName(result.Path) + "  " + FormatBytes(result.Bytes) + "  " + DateTime.Now.ToString("HH:mm:ss");
-                    AppendLog("JPEG保存成功：" + result.Path + " 大小=" + result.Bytes);
-                }
-                else
-                {
-                    _lastSave.ForeColor = Color.Salmon;
-                    _lastSave.Text = "保存失败：" + result.Error;
-                    AppendLog("保存失败：" + result.Error);
-                }
+                File.WriteAllBytes(path, jpeg);
+                _saveSequence++;
+                _lastSave.ForeColor = Color.Gainsboro;
+                _lastSave.Text = "最近写入 " + Path.GetFileName(path) + "  " + FormatBytes(jpeg.Length) + "  " + DateTime.Now.ToString("HH:mm:ss");
+                AppendLog("JPEG保存成功：" + path + " 大小=" + jpeg.Length);
             }
             catch (Exception ex)
             {
@@ -359,6 +392,19 @@ public sealed class MainForm : Form
                 AppendLog("保存异常：" + ex.Message);
             }
         });
+    }
+
+    private void LogFail(string message)
+    {
+        if (DateTime.UtcNow - _lastFailLogUtc < TimeSpan.FromSeconds(2))
+        {
+            return;
+        }
+
+        _lastFailLogUtc = DateTime.UtcNow;
+        _lastSave.ForeColor = Color.Salmon;
+        _lastSave.Text = message;
+        AppendLog(message);
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
