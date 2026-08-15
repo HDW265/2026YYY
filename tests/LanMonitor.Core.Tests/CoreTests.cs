@@ -317,9 +317,20 @@ public class FramePacketTests
 public class ReconnectGateTests
 {
     [Fact]
-    public void Default_allows_five_attempts_then_blocks()
+    public void Unlimited_always_allows_and_counts()
     {
-        var gate = new ReconnectGate { MaxAttempts = 5 };
+        var gate = new ReconnectGate { Unlimited = true, MaxAttempts = 2 };
+        for (var i = 1; i <= 20; i++)
+        {
+            Assert.True(gate.TryBeginAttempt());
+            Assert.Equal(i, gate.AttemptsUsed);
+        }
+    }
+
+    [Fact]
+    public void Limited_allows_five_attempts_then_blocks()
+    {
+        var gate = new ReconnectGate { Unlimited = false, MaxAttempts = 5 };
         for (var i = 1; i <= 5; i++)
         {
             Assert.True(gate.TryBeginAttempt());
@@ -332,9 +343,9 @@ public class ReconnectGateTests
     }
 
     [Fact]
-    public void Zero_max_disables_reconnect()
+    public void Zero_max_disables_reconnect_when_limited()
     {
-        var gate = new ReconnectGate { MaxAttempts = 0 };
+        var gate = new ReconnectGate { Unlimited = false, MaxAttempts = 0 };
         Assert.False(gate.CanAttempt);
         Assert.False(gate.TryBeginAttempt());
     }
@@ -342,7 +353,7 @@ public class ReconnectGateTests
     [Fact]
     public void Reset_clears_used_count()
     {
-        var gate = new ReconnectGate { MaxAttempts = 2 };
+        var gate = new ReconnectGate { Unlimited = false, MaxAttempts = 2 };
         Assert.True(gate.TryBeginAttempt());
         Assert.True(gate.TryBeginAttempt());
         Assert.False(gate.TryBeginAttempt());

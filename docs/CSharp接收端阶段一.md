@@ -36,7 +36,7 @@ dotnet publish src\LanMonitor.Receiver\LanMonitor.Receiver.csproj -c Release -r 
 
 ## 与 C# 发送端对接（阶段二，推荐）
 
-协议：**4 字节小端长度 + JPEG**。接收端先监听，发送端填本机 IP / `19730` 连接。详见 `docs/CSharp发送端阶段二.md`。
+协议：**4 字节小端长度 + JPEG**。接收端先监听；发送端首次设 IP/端口/密码后后台常驻，**默认持续重连**，热键 `Ctrl+Shift+Alt+M` + 密码调出（无托盘）。详见 `docs/CSharp发送端阶段二.md`。
 
 ## 与易语言被控对接（兼容）
 

@@ -15,7 +15,7 @@ internal enum SenderState
 internal sealed class StreamSession : IDisposable
 {
     private readonly object _gate = new();
-    private readonly ReconnectGate _reconnect = new();
+    private readonly ReconnectGate _reconnect = new() { Unlimited = true };
     private CancellationTokenSource? _cts;
     private TcpClient? _tcp;
     private NetworkStream? _stream;
@@ -25,11 +25,20 @@ internal sealed class StreamSession : IDisposable
     private volatile int _quality = 60;
     private volatile int _maxEdge = 1280;
     private int _userStop;
+    private int _failStreak;
 
     public string Host { get; set; } = "127.0.0.1";
     public int Port { get; set; } = 19730;
     public bool AutoReconnect { get; set; } = true;
-    public int ReconnectDelayMs { get; set; } = 2500;
+
+    /// <summary>基础重连间隔；持续模式下会随失败次数略微退避，上限 30s。</summary>
+    public int ReconnectDelayMs { get; set; } = 3000;
+
+    public bool ContinuousReconnect
+    {
+        get => _reconnect.Unlimited;
+        set => _reconnect.Unlimited = value;
+    }
 
     public int MaxReconnectAttempts
     {
@@ -39,7 +48,9 @@ internal sealed class StreamSession : IDisposable
 
     public SenderState State { get; private set; } = SenderState.Idle;
     public int ReconnectAttemptsUsed => _reconnect.AttemptsUsed;
-    public int ReconnectAttemptsRemaining => _reconnect.AttemptsRemaining;
+    public int ReconnectAttemptsRemaining =>
+        ContinuousReconnect ? _reconnect.AttemptsUsed : _reconnect.AttemptsRemaining;
+
     public bool IsRunning => _cts is not null && !_cts.IsCancellationRequested;
 
     public int Fps
@@ -70,6 +81,19 @@ internal sealed class StreamSession : IDisposable
     public event Action<SenderState>? StateChanged;
     public event Action<int, double>? FrameSent;
 
+    public void ApplySettings(SenderSettings settings)
+    {
+        Host = settings.Host;
+        Port = settings.Port;
+        Fps = settings.Fps;
+        Quality = settings.Quality;
+        MaxEdge = settings.MaxEdge;
+        AutoReconnect = settings.AutoReconnect;
+        ContinuousReconnect = settings.ContinuousReconnect;
+        MaxReconnectAttempts = settings.MaxReconnectAttempts;
+        Streaming = settings.Streaming;
+    }
+
     public void Start()
     {
         lock (_gate)
@@ -80,6 +104,7 @@ internal sealed class StreamSession : IDisposable
             }
 
             _userStop = 0;
+            _failStreak = 0;
             _reconnect.Reset();
             _cts = new CancellationTokenSource();
             var cts = _cts;
@@ -124,16 +149,19 @@ internal sealed class StreamSession : IDisposable
                     {
                         SetState(SenderState.StoppedAtLimit);
                         RaiseLog(AutoReconnect
-                            ? $"已达重连上限 {_reconnect.MaxAttempts}，停止。可改次数后点「连接」。"
+                            ? $"已达重连上限 {_reconnect.MaxAttempts}，停止。"
                             : "自动重连已关，停止。");
                         break;
                     }
 
+                    var delay = NextDelayMs();
                     SetState(SenderState.Reconnecting);
-                    RaiseLog($"重连 {_reconnect.AttemptsUsed}/{_reconnect.MaxAttempts}，{ReconnectDelayMs}ms 后重试…");
+                    RaiseLog(ContinuousReconnect
+                        ? $"持续重连 第 {_reconnect.AttemptsUsed} 次，{delay}ms 后重试…"
+                        : $"重连 {_reconnect.AttemptsUsed}/{_reconnect.MaxAttempts}，{delay}ms 后重试…");
                     try
                     {
-                        await Task.Delay(ReconnectDelayMs, token).ConfigureAwait(false);
+                        await Task.Delay(delay, token).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
                     {
@@ -167,10 +195,12 @@ internal sealed class StreamSession : IDisposable
                         tcp = null;
                     }
 
+                    _failStreak = 0;
                     _reconnect.Reset();
                     SetState(SenderState.Connected);
                     RaiseLog("已连接，开始推流。");
                     await CaptureLoopAsync(token).ConfigureAwait(false);
+                    _failStreak++;
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
@@ -178,6 +208,7 @@ internal sealed class StreamSession : IDisposable
                 }
                 catch (Exception ex)
                 {
+                    _failStreak++;
                     RaiseLog("连接/发送失败: " + ex.Message);
                 }
                 finally
@@ -208,6 +239,21 @@ internal sealed class StreamSession : IDisposable
             }
         }
     }
+
+    private int NextDelayMs()
+    {
+        var baseMs = Math.Max(500, ReconnectDelayMs);
+        if (!ContinuousReconnect)
+        {
+            return baseMs;
+        }
+
+        // 3s → 6s → 12s → 24s → 封顶 30s
+        var shift = Math.Clamp(_failStreak, 0, 3);
+        var delay = baseMs * (1 << shift);
+        return Math.Min(30_000, delay);
+    }
+
     private async Task CaptureLoopAsync(CancellationToken token)
     {
         while (!token.IsCancellationRequested && Volatile.Read(ref _userStop) == 0)

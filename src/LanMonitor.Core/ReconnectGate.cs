@@ -1,20 +1,24 @@
 namespace LanMonitor.Core;
 
 /// <summary>
-/// 自动重连次数闸门。MaxAttempts=0 表示不允许重连。
-/// 用户点击「连接」时应 Reset；每次计划重连前调用 TryBeginAttempt。
+/// 重连闸门。Unlimited=true（默认）时一直允许重连，仅累计 AttemptsUsed；
+/// Unlimited=false 时受 MaxAttempts 限制（0=不允许重连）。
 /// </summary>
 public sealed class ReconnectGate
 {
     private int _used;
 
+    public bool Unlimited { get; set; } = true;
+
     public int MaxAttempts { get; set; } = 5;
 
     public int AttemptsUsed => _used;
 
-    public int AttemptsRemaining => Math.Max(0, MaxAttempts - _used);
+    public int AttemptsRemaining => Unlimited
+        ? int.MaxValue
+        : Math.Max(0, MaxAttempts - _used);
 
-    public bool CanAttempt => MaxAttempts > 0 && _used < MaxAttempts;
+    public bool CanAttempt => Unlimited || (MaxAttempts > 0 && _used < MaxAttempts);
 
     public void Reset() => _used = 0;
 
