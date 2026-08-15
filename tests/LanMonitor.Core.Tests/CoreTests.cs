@@ -250,11 +250,104 @@ public class TcpReceiveServerTests
         server.Stop();
     }
 
+    [Fact]
+    public async Task Receives_length_prefixed_jpeg_over_tcp()
+    {
+        var jpeg = MakeJpeg();
+        Assert.True(jpeg.Length >= 54);
+        var received = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var server = new TcpReceiveServer { Port = 0, ReceiveEnabled = true };
+        server.FrameReceived += frame => received.TrySetResult(frame);
+        server.Start();
+
+        using (var client = new TcpClient())
+        {
+            await client.ConnectAsync(System.Net.IPAddress.Loopback, server.BoundPort);
+            await FramePacket.WriteAsync(client.GetStream(), jpeg);
+            var completed = await Task.WhenAny(received.Task, Task.Delay(3000));
+            Assert.True(completed == received.Task, "timed out waiting for prefixed frame");
+            var frame = await received.Task;
+            Assert.Equal(jpeg, frame);
+        }
+
+        server.Stop();
+    }
+
     private static byte[] MakeJpeg()
     {
-        using var image = new Image<Rgb24>(24, 24);
+        using var image = new Image<Rgb24>(64, 48);
         using var ms = new MemoryStream();
         image.Save(ms, new JpegEncoder { Quality = 70 });
         return ms.ToArray();
+    }
+}
+
+public class FramePacketTests
+{
+    [Fact]
+    public void Wrap_prefixes_little_endian_length()
+    {
+        var jpeg = new byte[] { 0xFF, 0xD8, 0x00, 0x01, 0xFF, 0xD9 };
+        var packet = FramePacket.Wrap(jpeg);
+        Assert.Equal(4 + jpeg.Length, packet.Length);
+        Assert.Equal(jpeg.Length, BitConverter.ToInt32(packet, 0));
+        Assert.Equal(jpeg, packet.AsSpan(4).ToArray());
+    }
+
+    [Fact]
+    public void Assembler_accepts_wrapped_jpeg_split_across_writes()
+    {
+        using var image = new Image<Rgb24>(80, 60);
+        using var ms = new MemoryStream();
+        image.Save(ms, new JpegEncoder { Quality = 65 });
+        var jpeg = ms.ToArray();
+        Assert.True(jpeg.Length >= 54);
+
+        var packet = FramePacket.Wrap(jpeg);
+        var assembler = new FrameAssembler();
+        var mid = packet.Length / 3;
+        Assert.Empty(assembler.Push(packet.AsSpan(0, mid)));
+        Assert.Empty(assembler.Push(packet.AsSpan(mid, mid)));
+        var frames = assembler.Push(packet.AsSpan(mid * 2));
+        Assert.Single(frames);
+        Assert.Equal(jpeg, frames[0]);
+    }
+}
+
+public class ReconnectGateTests
+{
+    [Fact]
+    public void Default_allows_five_attempts_then_blocks()
+    {
+        var gate = new ReconnectGate { MaxAttempts = 5 };
+        for (var i = 1; i <= 5; i++)
+        {
+            Assert.True(gate.TryBeginAttempt());
+            Assert.Equal(i, gate.AttemptsUsed);
+        }
+
+        Assert.False(gate.TryBeginAttempt());
+        Assert.Equal(5, gate.AttemptsUsed);
+        Assert.Equal(0, gate.AttemptsRemaining);
+    }
+
+    [Fact]
+    public void Zero_max_disables_reconnect()
+    {
+        var gate = new ReconnectGate { MaxAttempts = 0 };
+        Assert.False(gate.CanAttempt);
+        Assert.False(gate.TryBeginAttempt());
+    }
+
+    [Fact]
+    public void Reset_clears_used_count()
+    {
+        var gate = new ReconnectGate { MaxAttempts = 2 };
+        Assert.True(gate.TryBeginAttempt());
+        Assert.True(gate.TryBeginAttempt());
+        Assert.False(gate.TryBeginAttempt());
+        gate.Reset();
+        Assert.Equal(0, gate.AttemptsUsed);
+        Assert.True(gate.TryBeginAttempt());
     }
 }
