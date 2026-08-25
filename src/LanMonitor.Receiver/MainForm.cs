@@ -37,11 +37,21 @@ public sealed class MainForm : Form
     private readonly NumericUpDown _quality = new();
     private readonly Label _lastSave = new();
     private readonly TextBox _log = new();
+    private readonly Label _tip = new();
+    private readonly Button _btnToggleLog = new();
+    private readonly Panel _logBody = new();
     private TableLayoutPanel? _root;
+    private readonly ReceiverSettings _settings = ReceiverSettings.LoadOrDefault();
 
     private int _saveSequence = 1;
     private bool _fullPreview;
+    private bool _logExpanded = true;
+    private bool _suppressSettingsEvents;
     private DateTime _lastFailLogUtc = DateTime.MinValue;
+
+    private const int LogExpandedHeight = 148;
+    private const int LogCollapsedHeight = 36;
+    private const int SaveBarHeight = 100;
 
     public MainForm()
     {
@@ -55,6 +65,8 @@ public sealed class MainForm : Form
         ForeColor = TextColor;
         Font = new Font("Microsoft YaHei UI", 9.75F);
 
+        _logExpanded = _settings.LogExpanded;
+
         _root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -66,14 +78,17 @@ public sealed class MainForm : Form
         // 加高顶栏，避免按钮/摘要被裁
         _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
         _root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
-        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, SaveBarHeight));
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, _logExpanded ? LogExpandedHeight : LogCollapsedHeight));
         Controls.Add(_root);
 
         _root.Controls.Add(BuildTopBar(), 0, 0);
         _root.Controls.Add(BuildPreview(), 0, 1);
         _root.Controls.Add(BuildSaveBar(), 0, 2);
         _root.Controls.Add(BuildLog(), 0, 3);
+
+        ApplySettingsToUi();
+        ApplyLogExpandedUi();
 
         _server.Log += msg => BeginInvokeSafe(() => AppendLog(msg));
         _server.ClientChanged += ep => BeginInvokeSafe(() =>
@@ -87,10 +102,15 @@ public sealed class MainForm : Form
         });
         _server.FrameReceived += OnFrameReceived;
 
-        FormClosing += (_, _) => _server.Dispose();
+        FormClosing += (_, _) =>
+        {
+            PersistSettings();
+            _server.Dispose();
+        };
         KeyDown += OnKeyDown;
         RefreshAllowSummary();
         AppendLog("就绪。点「开始监听」。预览与保存互不影响。默认端口 19730。");
+        AppendLog("配置目录：" + ReceiverSettings.ConfigDirectory);
     }
 
     private Control BuildTopBar()
@@ -143,6 +163,13 @@ public sealed class MainForm : Form
         _port.Dock = DockStyle.Fill;
         _port.Margin = new Padding(8, 8, 0, 8);
         _port.MinimumSize = new Size(120, 28);
+        _port.ValueChanged += (_, _) =>
+        {
+            if (!_suppressSettingsEvents)
+            {
+                PersistSettings();
+            }
+        };
         row1.Controls.Add(_port, 2, 0);
 
         StyleButton(_btnListen, "开始监听");
@@ -161,7 +188,16 @@ public sealed class MainForm : Form
         _chkPreview.Anchor = AnchorStyles.Left;
         _chkPreview.Margin = new Padding(20, 12, 0, 0);
         _chkPreview.ForeColor = TextColor;
-        _chkPreview.CheckedChanged += (_, _) => UpdatePreviewHint();
+        _chkPreview.CheckedChanged += (_, _) =>
+        {
+            if (_suppressSettingsEvents)
+            {
+                return;
+            }
+
+            OnPreviewCheckedChanged();
+            PersistSettings();
+        };
         row1.Controls.Add(_chkPreview, 7, 0);
 
         // 行2：客户 | fps | 最近帧 | 等比/拉伸 | 允许摘要 | 管理
@@ -299,16 +335,26 @@ public sealed class MainForm : Form
         _chkSave.AutoSize = true;
         _chkSave.Margin = new Padding(0, 10, 16, 0);
         _chkSave.ForeColor = TextColor;
-        _chkSave.CheckedChanged += (_, _) => UpdatePreviewHint();
+        _chkSave.CheckedChanged += (_, _) =>
+        {
+            if (_suppressSettingsEvents)
+            {
+                return;
+            }
+
+            UpdatePreviewHint();
+            PersistSettings();
+        };
         row1.Controls.Add(_chkSave, 0, 0);
 
         row1.Controls.Add(MakeCaption("目录"), 1, 0);
 
         StyleTextBox(_directory);
-        _directory.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "局域网监控");
+        _directory.Text = _settings.SaveDirectory;
         _directory.Dock = DockStyle.Fill;
         _directory.Margin = new Padding(8, 8, 8, 8);
         _directory.MinimumSize = new Size(200, 28);
+        _directory.Leave += (_, _) => PersistSettings();
         row1.Controls.Add(_directory, 2, 0);
 
         var browse = new Button();
@@ -342,7 +388,14 @@ public sealed class MainForm : Form
         _interval.Dock = DockStyle.Fill;
         _interval.Margin = new Padding(8, 8, 4, 8);
         _interval.MinimumSize = new Size(90, 28);
-        _interval.ValueChanged += (_, _) => _saveScheduler.IntervalSeconds = (double)_interval.Value;
+        _interval.ValueChanged += (_, _) =>
+        {
+            _saveScheduler.IntervalSeconds = (double)_interval.Value;
+            if (!_suppressSettingsEvents)
+            {
+                PersistSettings();
+            }
+        };
         row2.Controls.Add(_interval, 1, 0);
 
         row2.Controls.Add(MakeCaption("秒", padLeft: 4, padRight: 20), 2, 0);
@@ -355,6 +408,13 @@ public sealed class MainForm : Form
         _quality.Dock = DockStyle.Fill;
         _quality.Margin = new Padding(8, 8, 8, 8);
         _quality.MinimumSize = new Size(90, 28);
+        _quality.ValueChanged += (_, _) =>
+        {
+            if (!_suppressSettingsEvents)
+            {
+                PersistSettings();
+            }
+        };
         row2.Controls.Add(_quality, 4, 0);
 
         _lastSave.Text = "最近写入 --";
@@ -367,33 +427,57 @@ public sealed class MainForm : Form
         bar.Controls.Add(row1, 0, 0);
         bar.Controls.Add(row2, 0, 1);
         _saveScheduler.IntervalSeconds = (double)_interval.Value;
-
-        var tip = new Label
-        {
-            Text = "提示：预览与保存互不影响；关预览时仍可按间隔存图。",
-            AutoSize = true,
-            ForeColor = Color.FromArgb(150, 150, 160),
-            Margin = new Padding(0, 0, 0, 0)
-        };
-        // 把 tip 叠在保存栏底部不太方便；改为挂在 row2 最近写入旁已够。追加到 bar 第三行更清晰。
-        bar.RowCount = 3;
-        bar.RowStyles.Clear();
-        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
-        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
-        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 16));
-        bar.Controls.Add(tip, 0, 2);
         return bar;
     }
 
     private Control BuildLog()
     {
-        var host = new Panel
+        var host = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(28, 28, 30),
-            Padding = new Padding(10, 8, 10, 8),
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(8, 4, 8, 6),
             Margin = new Padding(0)
         };
+        host.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        host.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        _btnToggleLog.FlatStyle = FlatStyle.Flat;
+        _btnToggleLog.FlatAppearance.BorderSize = 0;
+        _btnToggleLog.BackColor = Color.FromArgb(40, 40, 44);
+        _btnToggleLog.ForeColor = TextColor;
+        _btnToggleLog.TextAlign = ContentAlignment.MiddleLeft;
+        _btnToggleLog.Cursor = Cursors.Hand;
+        _btnToggleLog.Dock = DockStyle.Fill;
+        _btnToggleLog.Margin = new Padding(0);
+        _btnToggleLog.Click += (_, _) =>
+        {
+            _logExpanded = !_logExpanded;
+            ApplyLogExpandedUi();
+            PersistSettings();
+        };
+        host.Controls.Add(_btnToggleLog, 0, 0);
+
+        _logBody.Dock = DockStyle.Fill;
+        _logBody.Padding = new Padding(2, 4, 2, 0);
+        var bodyLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0)
+        };
+        bodyLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        bodyLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        _tip.Text = "提示：预览与保存互不影响；关预览时仍可按间隔存图。点击上方标题可折叠本区域。";
+        _tip.AutoSize = true;
+        _tip.ForeColor = Color.FromArgb(150, 150, 160);
+        _tip.Margin = new Padding(2, 0, 2, 4);
+        bodyLayout.Controls.Add(_tip, 0, 0);
+
         _log.Dock = DockStyle.Fill;
         _log.Multiline = true;
         _log.ReadOnly = true;
@@ -401,7 +485,10 @@ public sealed class MainForm : Form
         _log.BorderStyle = BorderStyle.None;
         _log.BackColor = Color.FromArgb(28, 28, 30);
         _log.ForeColor = Color.FromArgb(200, 200, 200);
-        host.Controls.Add(_log);
+        bodyLayout.Controls.Add(_log, 0, 1);
+
+        _logBody.Controls.Add(bodyLayout);
+        host.Controls.Add(_logBody, 0, 1);
         return host;
     }
 
@@ -494,6 +581,89 @@ public sealed class MainForm : Form
         }
     }
 
+    private void OnPreviewCheckedChanged()
+    {
+        if (_chkPreview.Checked)
+        {
+            UpdatePreviewHint();
+            if (_preview.Image is null)
+            {
+                _waiting.Visible = true;
+            }
+
+            return;
+        }
+
+        ClearPreviewImage();
+        _waiting.Visible = false;
+        UpdatePreviewHint();
+    }
+
+    private void ClearPreviewImage()
+    {
+        var old = _preview.Image;
+        _preview.Image = null;
+        old?.Dispose();
+    }
+
+    private void ApplyLogExpandedUi()
+    {
+        _logBody.Visible = _logExpanded;
+        _btnToggleLog.Text = _logExpanded
+            ? "▾ 提示与日志（点击折叠）"
+            : "▸ 提示与日志（点击展开）";
+
+        if (_root is null)
+        {
+            return;
+        }
+
+        _root.RowStyles[3] = new RowStyle(
+            SizeType.Absolute,
+            _logExpanded ? LogExpandedHeight : LogCollapsedHeight);
+    }
+
+    private void ApplySettingsToUi()
+    {
+        _suppressSettingsEvents = true;
+        try
+        {
+            _directory.Text = _settings.SaveDirectory;
+            _port.Value = Math.Clamp(_settings.Port, (int)_port.Minimum, (int)_port.Maximum);
+            _interval.Value = Math.Clamp((decimal)_settings.IntervalSeconds, _interval.Minimum, _interval.Maximum);
+            _quality.Value = Math.Clamp(_settings.Quality, (int)_quality.Minimum, (int)_quality.Maximum);
+            _chkPreview.Checked = _settings.PreviewOn;
+            _chkSave.Checked = _settings.SaveOn;
+            _logExpanded = _settings.LogExpanded;
+            _saveScheduler.IntervalSeconds = (double)_interval.Value;
+        }
+        finally
+        {
+            _suppressSettingsEvents = false;
+        }
+
+        OnPreviewCheckedChanged();
+    }
+
+    private void PersistSettings()
+    {
+        try
+        {
+            _settings.SaveDirectory = _directory.Text.Trim();
+            _settings.LogExpanded = _logExpanded;
+            _settings.Port = (int)_port.Value;
+            _settings.IntervalSeconds = (double)_interval.Value;
+            _settings.Quality = (int)_quality.Value;
+            _settings.PreviewOn = _chkPreview.Checked;
+            _settings.SaveOn = _chkSave.Checked;
+            _settings.Save();
+        }
+        catch (Exception ex)
+        {
+            AppendLog("保存配置失败：" + ex.Message);
+        }
+    }
+
     private void ToggleListen()
     {
         if (_server.IsListening)
@@ -534,6 +704,7 @@ public sealed class MainForm : Form
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
             _directory.Text = dialog.SelectedPath;
+            PersistSettings();
         }
     }
 
@@ -574,6 +745,12 @@ public sealed class MainForm : Form
             }
             else
             {
+                // 关预览时不保留旧帧
+                if (_preview.Image is not null)
+                {
+                    ClearPreviewImage();
+                }
+
                 UpdatePreviewHint();
             }
 
