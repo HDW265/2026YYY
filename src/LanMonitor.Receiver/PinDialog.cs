@@ -31,7 +31,7 @@ internal sealed class PinDialog : Form
         _pin.Location = new Point(20, 48);
         _pin.Width = 310;
         _pin.UseSystemPasswordChar = true;
-        _pin.MaxLength = 6;
+        _pin.MaxLength = 8;
         _pin.BackColor = Color.FromArgb(58, 58, 64);
         _pin.ForeColor = Color.Gainsboro;
         _pin.BorderStyle = BorderStyle.FixedSingle;
