@@ -9,39 +9,40 @@ internal sealed class SetupPinDialog : Form
     public SetupPinDialog(ReceiverSettings settings)
     {
         _settings = settings;
-        Text = "SF_view · 设置验证码";
+        Text = "SF_view · 首次设置验证码";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         ShowInTaskbar = true;
-        ClientSize = new Size(380, 210);
+        TopMost = true;
+        ClientSize = new Size(400, 230);
         Font = new Font("Microsoft YaHei UI", 9.75F);
         BackColor = Color.FromArgb(32, 32, 36);
         ForeColor = Color.Gainsboro;
 
         var tip = new Label
         {
-            Text = "首次使用请设置 4～6 位数字验证码。\n最小化后按 Ctrl+Shift+Alt+V 唤出并验证。",
+            Text = "这是首次启动，请先设置 4～6 位数字验证码。\n设置完成后将直接进入主界面。\n以后最小化可用 Ctrl+Shift+Alt+V 唤出。",
             AutoSize = true,
             Location = new Point(20, 16),
             ForeColor = Color.FromArgb(180, 180, 190)
         };
 
-        var l1 = new Label { Text = "验证码", AutoSize = true, Location = new Point(20, 70), ForeColor = ForeColor };
+        var l1 = new Label { Text = "验证码", AutoSize = true, Location = new Point(20, 90), ForeColor = ForeColor };
         StylePin(_pin);
-        _pin.Location = new Point(100, 66);
-        _pin.Width = 240;
+        _pin.Location = new Point(100, 86);
+        _pin.Width = 260;
 
-        var l2 = new Label { Text = "确认", AutoSize = true, Location = new Point(20, 110), ForeColor = ForeColor };
+        var l2 = new Label { Text = "确认", AutoSize = true, Location = new Point(20, 130), ForeColor = ForeColor };
         StylePin(_confirm);
-        _confirm.Location = new Point(100, 106);
-        _confirm.Width = 240;
+        _confirm.Location = new Point(100, 126);
+        _confirm.Width = 260;
 
         var ok = new Button
         {
             Text = "确定",
-            Location = new Point(180, 160),
+            Location = new Point(200, 180),
             Width = 80,
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(70, 70, 78),
@@ -53,7 +54,7 @@ internal sealed class SetupPinDialog : Form
         {
             Text = "取消",
             DialogResult = DialogResult.Cancel,
-            Location = new Point(270, 160),
+            Location = new Point(290, 180),
             Width = 80,
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(70, 70, 78),
