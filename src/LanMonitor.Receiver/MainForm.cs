@@ -30,32 +30,35 @@ public sealed class MainForm : Form
     private readonly AllowIpPolicy _allowPolicy = new();
     private readonly PictureBox _preview = new();
     private readonly Label _waiting = new();
-    private readonly Label _previewOffHint = new();
     private readonly CheckBox _chkSave = new();
     private readonly TextBox _directory = new();
     private readonly NumericUpDown _interval = new();
     private readonly NumericUpDown _quality = new();
     private readonly Label _lastSave = new();
     private readonly TextBox _log = new();
-    private readonly Label _tip = new();
     private readonly Button _btnToggleLog = new();
     private readonly Panel _logBody = new();
     private TableLayoutPanel? _root;
-    private readonly ReceiverSettings _settings = ReceiverSettings.LoadOrDefault();
+    private readonly ReceiverSettings _settings;
+    private readonly HotkeyHostForm _hotkeyHost = new();
 
     private int _saveSequence = 1;
     private bool _fullPreview;
     private bool _logExpanded = true;
     private bool _suppressSettingsEvents;
+    private bool _locked;
+    private bool _exitAllowed;
+    private bool _pinDialogOpen;
     private DateTime _lastFailLogUtc = DateTime.MinValue;
 
     private const int LogExpandedHeight = 148;
     private const int LogCollapsedHeight = 36;
     private const int SaveBarHeight = 100;
 
-    public MainForm()
+    public MainForm(ReceiverSettings settings)
     {
-        Text = "局域网监控 · 接收端";
+        _settings = settings;
+        Text = "SF_view";
         AutoScaleMode = AutoScaleMode.Dpi;
         MinimumSize = new Size(1280, 800);
         Size = new Size(1360, 860);
@@ -104,13 +107,19 @@ public sealed class MainForm : Form
         });
         _server.FrameReceived += OnFrameReceived;
 
-        FormClosing += (_, _) =>
+        Resize += (_, _) =>
         {
-            PersistSettings();
-            _server.Dispose();
+            if (WindowState == FormWindowState.Minimized)
+            {
+                LockHide();
+            }
         };
+        FormClosing += OnFormClosing;
         KeyDown += OnKeyDown;
-        AppendLog("就绪。点「开始监听」。预览与保存互不影响。默认端口 19730。");
+        Load += (_, _) => InitHotkey();
+
+        AppendLog("就绪。点「开始监听」。默认端口 19730。");
+        AppendLog("热键 " + NativeHotkey.Describe(_settings.HotkeyModifiers, _settings.HotkeyVirtualKey) + " 唤出（最小化后需验证码）。");
         AppendLog("配置目录：" + ReceiverSettings.ConfigDirectory);
     }
 
@@ -285,22 +294,11 @@ public sealed class MainForm : Form
         _waiting.ForeColor = Color.FromArgb(160, 160, 160);
         _waiting.AutoSize = true;
         _waiting.Font = new Font("Microsoft YaHei UI", 16F);
-        _previewOffHint.Text = "预览已关闭";
-        _previewOffHint.ForeColor = Color.FromArgb(220, 200, 120);
-        _previewOffHint.AutoSize = true;
-        _previewOffHint.Font = new Font("Microsoft YaHei UI", 14F);
-        _previewOffHint.Visible = false;
-        host.Controls.Add(_previewOffHint);
         host.Controls.Add(_waiting);
         host.Controls.Add(_preview);
         _preview.SendToBack();
-        host.Resize += (_, _) =>
-        {
-            CenterWaiting(host);
-            CenterOverlay(host, _previewOffHint);
-        };
+        host.Resize += (_, _) => CenterWaiting(host);
         CenterWaiting(host);
-        CenterOverlay(host, _previewOffHint);
         return host;
     }
 
@@ -343,7 +341,6 @@ public sealed class MainForm : Form
                 return;
             }
 
-            UpdatePreviewHint();
             PersistSettings();
         };
         row1.Controls.Add(_chkSave, 0, 0);
@@ -463,21 +460,6 @@ public sealed class MainForm : Form
 
         _logBody.Dock = DockStyle.Fill;
         _logBody.Padding = new Padding(2, 4, 2, 0);
-        var bodyLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            Margin = new Padding(0)
-        };
-        bodyLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        bodyLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        _tip.Text = "提示：预览与保存互不影响；关预览时仍可按间隔存图。点击上方标题可折叠本区域。";
-        _tip.AutoSize = true;
-        _tip.ForeColor = Color.FromArgb(150, 150, 160);
-        _tip.Margin = new Padding(2, 0, 2, 4);
-        bodyLayout.Controls.Add(_tip, 0, 0);
 
         _log.Dock = DockStyle.Fill;
         _log.Multiline = true;
@@ -486,9 +468,7 @@ public sealed class MainForm : Form
         _log.BorderStyle = BorderStyle.None;
         _log.BackColor = Color.FromArgb(28, 28, 30);
         _log.ForeColor = Color.FromArgb(200, 200, 200);
-        bodyLayout.Controls.Add(_log, 0, 1);
-
-        _logBody.Controls.Add(bodyLayout);
+        _logBody.Controls.Add(_log);
         host.Controls.Add(_logBody, 0, 1);
         return host;
     }
@@ -540,14 +520,6 @@ public sealed class MainForm : Form
             Math.Max(0, (host.ClientSize.Height - _waiting.Height) / 2));
     }
 
-    private static void CenterOverlay(Control host, Label label)
-    {
-        label.Location = new Point(
-            Math.Max(0, (host.ClientSize.Width - label.Width) / 2),
-            Math.Max(0, (host.ClientSize.Height - label.Height) / 2));
-        label.BringToFront();
-    }
-
     private void RefreshAllowSummary()
     {
         _allowSummary.Text = _allowPolicy.SummaryText();
@@ -565,29 +537,10 @@ public sealed class MainForm : Form
         }
     }
 
-    private void UpdatePreviewHint()
-    {
-        if (_chkPreview.Checked)
-        {
-            _previewOffHint.Visible = false;
-            return;
-        }
-
-        _previewOffHint.Text = _chkSave.Checked
-            ? "预览已关闭 · 保存仍可进行"
-            : "预览已关闭";
-        _previewOffHint.Visible = true;
-        if (_preview.Parent is Control host)
-        {
-            CenterOverlay(host, _previewOffHint);
-        }
-    }
-
     private void OnPreviewCheckedChanged()
     {
         if (_chkPreview.Checked)
         {
-            UpdatePreviewHint();
             if (_preview.Image is null)
             {
                 _waiting.Visible = true;
@@ -596,9 +549,9 @@ public sealed class MainForm : Form
             return;
         }
 
+        // 关预览：清空画面，全黑无字
         ClearPreviewImage();
         _waiting.Visible = false;
-        UpdatePreviewHint();
     }
 
     private void ClearPreviewImage()
@@ -608,12 +561,123 @@ public sealed class MainForm : Form
         old?.Dispose();
     }
 
+    private void InitHotkey()
+    {
+        _hotkeyHost.HotkeyPressed += () => BeginInvokeSafe(TryUnlockFromHotkey);
+        _hotkeyHost.Show();
+        if (!_hotkeyHost.TryRegister(_settings.HotkeyModifiers, _settings.HotkeyVirtualKey, out var error))
+        {
+            AppendLog(error);
+            MessageBox.Show(this, error + "\n请关闭占用该热键的程序后重启 SF_view。", "SF_view", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private void LockHide()
+    {
+        if (_locked || _exitAllowed)
+        {
+            return;
+        }
+
+        _locked = true;
+        ClearPreviewImage();
+        _waiting.Visible = false;
+        if (WindowState == FormWindowState.Minimized)
+        {
+            WindowState = FormWindowState.Normal;
+        }
+
+        ShowInTaskbar = false;
+        Hide();
+    }
+
+    private void TryUnlockFromHotkey()
+    {
+        if (_pinDialogOpen)
+        {
+            return;
+        }
+
+        if (!_locked && Visible)
+        {
+            return;
+        }
+
+        if (!PromptPin("输入验证码以打开 SF_view"))
+        {
+            return;
+        }
+
+        _locked = false;
+        ShowInTaskbar = true;
+        Show();
+        WindowState = FormWindowState.Normal;
+        Activate();
+        BringToFront();
+        if (_chkPreview.Checked && _preview.Image is null)
+        {
+            _waiting.Visible = true;
+        }
+    }
+
+    private bool PromptPin(string prompt)
+    {
+        _pinDialogOpen = true;
+        try
+        {
+            using var dlg = new PinDialog(_settings, "SF_view 验证", prompt);
+            return dlg.ShowDialog(this) == DialogResult.OK;
+        }
+        finally
+        {
+            _pinDialogOpen = false;
+        }
+    }
+
+    private void OnFormClosing(object? sender, FormClosingEventArgs e)
+    {
+        if (_exitAllowed)
+        {
+            PersistSettings();
+            _hotkeyHost.Unregister();
+            _hotkeyHost.Close();
+            _hotkeyHost.Dispose();
+            _server.Dispose();
+            return;
+        }
+
+        e.Cancel = true;
+        if (_pinDialogOpen)
+        {
+            return;
+        }
+
+        if (!PromptPin("输入验证码以退出 SF_view"))
+        {
+            if (_locked)
+            {
+                ShowInTaskbar = false;
+                Hide();
+            }
+
+            return;
+        }
+
+        _exitAllowed = true;
+        PersistSettings();
+        _hotkeyHost.Unregister();
+        _hotkeyHost.Close();
+        _hotkeyHost.Dispose();
+        _server.Dispose();
+        Close();
+    }
+
     private void ApplyLogExpandedUi()
     {
         _logBody.Visible = _logExpanded;
         _btnToggleLog.Text = _logExpanded
-            ? "▾ 提示与日志（点击折叠）"
-            : "▸ 提示与日志（点击展开）";
+            ? "▾ 日志（点击折叠）"
+            : "▸ 日志（点击展开）";
 
         if (_root is null)
         {
@@ -729,7 +793,7 @@ public sealed class MainForm : Form
 
             _frameSize.Text = "最近帧 " + FormatBytes(frame.Length);
 
-            if (_chkPreview.Checked)
+            if (_chkPreview.Checked && !_locked)
             {
                 _waiting.Visible = false;
                 _fps.Tick();
@@ -747,15 +811,14 @@ public sealed class MainForm : Form
                     LogFail("预览失败: " + ex.Message);
                 }
             }
-            else
+            else if (!_chkPreview.Checked)
             {
-                // 关预览时不保留旧帧
                 if (_preview.Image is not null)
                 {
                     ClearPreviewImage();
                 }
 
-                UpdatePreviewHint();
+                _waiting.Visible = false;
             }
 
             if (!_chkSave.Checked)
