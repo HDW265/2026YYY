@@ -9,7 +9,6 @@ public sealed class TcpReceiveServer : IDisposable
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private TcpClient? _currentTcp;
-    private int _accepting;
 
     public int Port { get; set; } = 19730;
     public int BoundPort { get; private set; }
@@ -126,19 +125,26 @@ public sealed class TcpReceiveServer : IDisposable
                 return;
             }
 
-            if (Interlocked.CompareExchange(ref _accepting, 1, 0) != 0)
+            TcpClient? previous;
+            lock (_gate)
             {
-                RaiseLog("已有客户在线，拒绝 " + endpoint);
-                return;
+                previous = _currentTcp;
+                _currentTcp = client;
+                CurrentClient = endpoint;
             }
+
+            if (previous is not null && !ReferenceEquals(previous, client))
+            {
+                var previousEndpoint = previous.Client.RemoteEndPoint?.ToString() ?? "";
+                RaiseLog("新客户顶替旧客户 " + previousEndpoint + " → " + endpoint);
+                try { previous.Close(); } catch { /* ignore */ }
+            }
+
+            ClientChanged?.Invoke(endpoint);
+            RaiseLog("用户【" + endpoint + "】已上线");
 
             try
             {
-                lock (_gate) { _currentTcp = client; }
-                CurrentClient = endpoint;
-                ClientChanged?.Invoke(endpoint);
-                RaiseLog("用户【" + endpoint + "】已上线");
-
                 var assembler = new FrameAssembler();
                 var buffer = new byte[64 * 1024];
                 var stream = client.GetStream();
@@ -172,18 +178,22 @@ public sealed class TcpReceiveServer : IDisposable
             }
             finally
             {
-                RaiseLog("用户【" + endpoint + "】连接已断开");
+                var wasCurrent = false;
                 lock (_gate)
                 {
-                    if (ReferenceEquals(_currentTcp, client))
+                    wasCurrent = ReferenceEquals(_currentTcp, client);
+                    if (wasCurrent)
                     {
                         _currentTcp = null;
+                        CurrentClient = null;
                     }
                 }
 
-                CurrentClient = null;
-                ClientChanged?.Invoke(null);
-                Interlocked.Exchange(ref _accepting, 0);
+                RaiseLog("用户【" + endpoint + "】连接已断开");
+                if (wasCurrent)
+                {
+                    ClientChanged?.Invoke(null);
+                }
             }
         }
     }

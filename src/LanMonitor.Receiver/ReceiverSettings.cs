@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LanMonitor.Core;
 
 namespace LanMonitor.Receiver;
 
@@ -11,6 +12,9 @@ internal sealed class ReceiverSettings
     public int Quality { get; set; } = 60;
     public bool PreviewOn { get; set; } = true;
     public bool SaveOn { get; set; } = true;
+    public bool AllowAll { get; set; } = true;
+    public List<string> KnownIps { get; set; } = new();
+    public List<string> AllowedIps { get; set; } = new();
 
     public static string ConfigDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LanMonitor.Receiver");
@@ -67,6 +71,28 @@ internal sealed class ReceiverSettings
         {
             Quality = 60;
         }
+
+        KnownIps = KnownIps
+            .Select(x => x.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        AllowedIps = AllowedIps
+            .Select(x => x.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public AllowIpPolicySnapshot ToAllowPolicySnapshot() =>
+        new(AllowAll, KnownIps, AllowedIps);
+
+    public void ApplyAllowPolicySnapshot(AllowIpPolicySnapshot snapshot)
+    {
+        AllowAll = snapshot.AllowAll;
+        KnownIps = snapshot.KnownIps.ToList();
+        AllowedIps = snapshot.AllowedIps.ToList();
+        Normalize();
     }
 
     public void Save()

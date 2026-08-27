@@ -44,4 +44,36 @@ public static class IpFilter
         var parts = allowList.Split(new[] { ',', ';', '\n', '\r', ' ' }, StringSplitOptions.RemoveEmptyEntries);
         return parts.Any(p => string.Equals(p.Trim(), ip, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>校验单个 IPv4 地址（不含端口）。</summary>
+    public static bool IsValidIpv4(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var ip = text.Trim();
+        if (ip.Contains(':') || ip.Contains('/'))
+        {
+            return false;
+        }
+
+        var parts = ip.Split('.');
+        if (parts.Length != 4)
+        {
+            return false;
+        }
+
+        foreach (var part in parts)
+        {
+            if (!byte.TryParse(part, out _))
+            {
+                return false;
+            }
+        }
+
+        return System.Net.IPAddress.TryParse(ip, out var addr)
+               && addr.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
+    }
 }

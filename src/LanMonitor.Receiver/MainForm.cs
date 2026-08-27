@@ -89,6 +89,8 @@ public sealed class MainForm : Form
 
         ApplySettingsToUi();
         ApplyLogExpandedUi();
+        _allowPolicy.ApplySnapshot(_settings.ToAllowPolicySnapshot());
+        RefreshAllowSummary();
 
         _server.Log += msg => BeginInvokeSafe(() => AppendLog(msg));
         _server.ClientChanged += ep => BeginInvokeSafe(() =>
@@ -108,7 +110,6 @@ public sealed class MainForm : Form
             _server.Dispose();
         };
         KeyDown += OnKeyDown;
-        RefreshAllowSummary();
         AppendLog("就绪。点「开始监听」。预览与保存互不影响。默认端口 19730。");
         AppendLog("配置目录：" + ReceiverSettings.ConfigDirectory);
     }
@@ -559,6 +560,7 @@ public sealed class MainForm : Form
         if (dlg.ShowDialog(this) == DialogResult.OK)
         {
             RefreshAllowSummary();
+            PersistSettings();
             AppendLog("允许策略已更新：" + _allowPolicy.SummaryText());
         }
     }
@@ -656,6 +658,8 @@ public sealed class MainForm : Form
             _settings.Quality = (int)_quality.Value;
             _settings.PreviewOn = _chkPreview.Checked;
             _settings.SaveOn = _chkSave.Checked;
+            var policySnapshot = _allowPolicy.CreateSnapshot();
+            _settings.ApplyAllowPolicySnapshot(policySnapshot);
             _settings.Save();
         }
         catch (Exception ex)

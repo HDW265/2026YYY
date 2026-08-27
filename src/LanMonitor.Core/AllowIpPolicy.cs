@@ -110,4 +110,48 @@ public sealed class AllowIpPolicy
             return $"白名单({_allowed.Count})";
         }
     }
+
+    public AllowIpPolicySnapshot CreateSnapshot()
+    {
+        lock (_gate)
+        {
+            return new AllowIpPolicySnapshot(
+                _allowAll,
+                _known.OrderBy(x => x).ToArray(),
+                _allowed.OrderBy(x => x).ToArray());
+        }
+    }
+
+    public void ApplySnapshot(AllowIpPolicySnapshot snapshot)
+    {
+        lock (_gate)
+        {
+            _allowAll = snapshot.AllowAll;
+            _known.Clear();
+            _allowed.Clear();
+            foreach (var ip in snapshot.KnownIps)
+            {
+                var t = ip.Trim();
+                if (!string.IsNullOrWhiteSpace(t))
+                {
+                    _known.Add(t);
+                }
+            }
+
+            foreach (var ip in snapshot.AllowedIps)
+            {
+                var t = ip.Trim();
+                if (!string.IsNullOrWhiteSpace(t))
+                {
+                    _allowed.Add(t);
+                    _known.Add(t);
+                }
+            }
+        }
+    }
 }
+
+public sealed record AllowIpPolicySnapshot(
+    bool AllowAll,
+    IReadOnlyList<string> KnownIps,
+    IReadOnlyList<string> AllowedIps);

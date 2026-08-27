@@ -149,6 +149,17 @@ public class IpFilterTests
         Assert.True(IpFilter.IsAllowed("192.168.111.59:1", "192.168.111.59"));
         Assert.False(IpFilter.IsAllowed("192.168.111.152:1", "192.168.111.59"));
     }
+
+    [Fact]
+    public void Validates_ipv4_literals()
+    {
+        Assert.True(IpFilter.IsValidIpv4("192.168.1.10"));
+        Assert.True(IpFilter.IsValidIpv4("10.0.0.1"));
+        Assert.False(IpFilter.IsValidIpv4("192.168.1"));
+        Assert.False(IpFilter.IsValidIpv4("192.168.1.1:8080"));
+        Assert.False(IpFilter.IsValidIpv4("::1"));
+        Assert.False(IpFilter.IsValidIpv4(""));
+    }
 }
 
 public class AllowIpPolicyTests
@@ -179,6 +190,20 @@ public class AllowIpPolicyTests
         var policy = new AllowIpPolicy();
         policy.RememberEndpoint("10.0.0.8:5555");
         Assert.Contains("10.0.0.8", policy.KnownIps);
+    }
+
+    [Fact]
+    public void Snapshot_round_trips()
+    {
+        var policy = new AllowIpPolicy { AllowAll = false };
+        policy.RememberIp("192.168.1.2");
+        policy.SetAllowed(new[] { "192.168.1.2" });
+        var snapshot = policy.CreateSnapshot();
+        var copy = new AllowIpPolicy();
+        copy.ApplySnapshot(snapshot);
+        Assert.False(copy.AllowAll);
+        Assert.Contains("192.168.1.2", copy.AllowedIps);
+        Assert.Contains("192.168.1.2", copy.KnownIps);
     }
 }
 
@@ -299,6 +324,40 @@ public class TcpReceiveServerTests
             Assert.True(completed == received.Task, "timed out waiting for prefixed frame");
             var frame = await received.Task;
             Assert.Equal(jpeg, frame);
+        }
+
+        server.Stop();
+    }
+
+    [Fact]
+    public async Task Second_connection_replaces_first()
+    {
+        var jpeg = MakeJpeg();
+        var logLines = new List<string>();
+        string? current = null;
+        using var server = new TcpReceiveServer { Port = 0 };
+        server.Log += msg => logLines.Add(msg);
+        server.ClientChanged += ep => current = ep;
+        server.Start();
+
+        using (var client1 = new TcpClient())
+        {
+            await client1.ConnectAsync(System.Net.IPAddress.Loopback, server.BoundPort);
+            await Task.Delay(100);
+            var firstEp = current;
+            Assert.False(string.IsNullOrEmpty(firstEp));
+
+            using var client2 = new TcpClient();
+            await client2.ConnectAsync(System.Net.IPAddress.Loopback, server.BoundPort);
+            await Task.Delay(150);
+            Assert.NotEqual(firstEp, current);
+            Assert.Contains(logLines, l => l.Contains("新客户顶替旧客户"));
+
+            var received = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+            server.FrameReceived += frame => received.TrySetResult(frame);
+            await FramePacket.WriteAsync(client2.GetStream(), jpeg);
+            var completed = await Task.WhenAny(received.Task, Task.Delay(3000));
+            Assert.True(completed == received.Task, "replacement client should deliver frames");
         }
 
         server.Stop();
