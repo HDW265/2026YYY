@@ -23,7 +23,7 @@ internal sealed class SetupPinDialog : Form
 
         var tip = new Label
         {
-            Text = "这是首次启动，请先设置 4～6 位数字验证码。\n设置完成后将直接进入主界面。\n以后最小化可用 Ctrl+Shift+Alt+V 唤出。",
+            Text = "这是首次启动，请先设置 4～8 位数字验证码。\n设置完成后将直接进入主界面。\n以后最小化可用 Ctrl+Shift+Alt+V 唤出。",
             AutoSize = true,
             Location = new Point(20, 16),
             ForeColor = Color.FromArgb(180, 180, 190)
@@ -75,7 +75,7 @@ internal sealed class SetupPinDialog : Form
     private static void StylePin(TextBox box)
     {
         box.UseSystemPasswordChar = true;
-        box.MaxLength = 6;
+        box.MaxLength = 8;
         box.BackColor = Color.FromArgb(58, 58, 64);
         box.ForeColor = Color.Gainsboro;
         box.BorderStyle = BorderStyle.FixedSingle;
@@ -85,7 +85,7 @@ internal sealed class SetupPinDialog : Form
     {
         if (!PinHasher.IsValidPinFormat(_pin.Text))
         {
-            MessageBox.Show(this, "验证码须为 4～6 位数字。", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "验证码须为 4～8 位数字。", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 

@@ -9,13 +9,13 @@ internal static class PinHasher
     private const int HashSize = 32;
 
     public static bool IsValidPinFormat(string? pin) =>
-        !string.IsNullOrEmpty(pin) && pin.Length is >= 4 and <= 6 && pin.All(char.IsDigit);
+        !string.IsNullOrEmpty(pin) && pin.Length is >= 4 and <= 8 && pin.All(char.IsDigit);
 
     public static void SetPin(ReceiverSettings settings, string pin)
     {
         if (!IsValidPinFormat(pin))
         {
-            throw new ArgumentException("验证码须为 4～6 位数字。", nameof(pin));
+            throw new ArgumentException("验证码须为 4～8 位数字。", nameof(pin));
         }
 
         var salt = RandomNumberGenerator.GetBytes(SaltSize);
