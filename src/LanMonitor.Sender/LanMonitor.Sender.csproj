@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>SF_link</AssemblyName>
+    <RootNamespace>LanMonitor.Sender</RootNamespace>
+    <Product>SF_link</Product>
+    <AssemblyTitle>SF_link</AssemblyTitle>
+    <Description>SF_link</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <ProjectReference Include="..\LanMonitor.Core\LanMonitor.Core.csproj" />
+  </ItemGroup>
+
+</Project>

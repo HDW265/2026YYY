@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>局域网监控接收端</AssemblyName>
+    <RootNamespace>LanMonitor.Receiver</RootNamespace>
+    <Product>局域网监控接收端</Product>
+    <Description>阶段一：收图显示 + 间隔 JPEG 保存</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LanMonitor.Core\LanMonitor.Core.csproj" />
+  </ItemGroup>
+
+</Project>
